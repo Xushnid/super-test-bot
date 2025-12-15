@@ -10,7 +10,7 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 # --- SOZLAMALAR ---
 TOKEN = os.getenv("BOT_TOKEN")  # Tokenni Renderdan oladi
 # QUYIDAGI LINKNI 3-QADAMDA O'ZGARTIRAMIZ:
-WEB_APP_URL = "https://github.com" 
+WEB_APP_URL = "https://xushnid.github.io/super-test-bot/" 
 
 # --- BOT VA BAZA ---
 bot = Bot(token=TOKEN)
