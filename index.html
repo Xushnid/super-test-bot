@@ -5,45 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Online Test</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Google Fonts: Inter shrifti -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <div class="container">
-        <!-- 1. Kirish oynasi -->
-        <div id="login-screen" class="card fade-in">
-            <div class="header-icon">📝</div>
-            <h2>Xush kelibsiz!</h2>
-            <p class="subtitle">Testni boshlash uchun ma'lumotlaringizni kiriting.</p>
-            
-            <div class="input-group">
-                <label>Ism Familiya</label>
-                <input type="text" id="name" placeholder="Masalan: Ali Valiyev" autocomplete="off">
-            </div>
-
-            <div class="input-group">
-                <label>Guruh</label>
-                <input type="text" id="group" placeholder="Masalan: 215-guruh" autocomplete="off">
-            </div>
-
-            <button onclick="startTest()" class="primary-btn">Boshlash</button>
+        
+        <!-- 0. Loading -->
+        <div id="loader" class="card" style="text-align: center;">
+            <p>Testlar yuklanmoqda...</p>
         </div>
 
-        <!-- 2. Test oynasi -->
+        <!-- 1. Testlar Ro'yxati -->
+        <div id="test-list-screen" class="card hidden">
+            <h2>Mavjud Testlar</h2>
+            <p class="subtitle">Yechmoqchi bo'lgan testingizni tanlang:</p>
+            <div id="tests-container"></div>
+        </div>
+
+        <!-- 2. Kirish -->
+        <div id="login-screen" class="card hidden">
+            <h2 id="selected-test-name">Test</h2>
+            <p class="subtitle">Ma'lumotlaringizni kiriting</p>
+            <input type="text" id="student_name" placeholder="Ism Familiya" required>
+            <button onclick="startQuiz()" class="primary-btn">Boshlash</button>
+        </div>
+
+        <!-- 3. Test Jarayoni -->
         <div id="quiz-screen" class="card hidden">
             <div class="quiz-header">
-                <h3>Test Sinovi</h3>
-                <span class="badge">5 ta savol</span>
+                <h3>Test</h3>
+                <span class="badge" id="q-count">0</span>
             </div>
-            
             <div id="questions-container"></div>
-            
-            <button onclick="finishTest()" class="primary-btn finish-btn">Yakunlash va Yuborish</button>
+            <button onclick="finishTest()" class="primary-btn finish-btn">Yakunlash</button>
         </div>
     </div>
-
     <script src="script.js"></script>
 </body>
 </html>
