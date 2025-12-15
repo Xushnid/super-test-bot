@@ -1,17 +1,28 @@
 :root {
-    --tg-theme-bg-color: #f2f2f6;
-    --tg-theme-button-color: #3390ec;
-    --tg-theme-button-text-color: #ffffff;
-    --tg-theme-text-color: #000000;
-    --card-bg: #ffffff;
-    --gray-text: #707579;
-    --border-radius: 16px;
+    /* Telegramning o'z o'zgaruvchilaridan foydalanamiz */
+    --bg-color: var(--tg-theme-bg-color, #efeff3); 
+    --text-color: var(--tg-theme-text-color, #000000);
+    --hint-color: var(--tg-theme-hint-color, #999999);
+    --button-color: var(--tg-theme-button-color, #3390ec);
+    --button-text-color: var(--tg-theme-button-text-color, #ffffff);
+    
+    /* Kartochkalar uchun rang (Dark va Light rejim uchun) */
+    --card-bg: var(--tg-theme-secondary-bg-color, #ffffff);
+    --input-bg: var(--tg-theme-bg-color, #f7f7f7);
+    --border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Dark mode uchun maxsus to'g'irlashlar */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --border-color: rgba(255, 255, 255, 0.15);
+    }
 }
 
 body {
     font-family: 'Inter', sans-serif;
-    background-color: var(--tg-theme-bg-color);
-    color: var(--tg-theme-text-color);
+    background-color: var(--bg-color);
+    color: var(--text-color);
     margin: 0;
     padding: 20px;
     display: flex;
@@ -19,7 +30,7 @@ body {
     align-items: flex-start;
     min-height: 100vh;
     box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent; /* Mobil bosganda ko'k ramka chiqmasligi uchun */
+    -webkit-tap-highlight-color: transparent;
 }
 
 .container {
@@ -29,9 +40,10 @@ body {
 
 .card {
     background: var(--card-bg);
-    border-radius: var(--border-radius);
+    border-radius: 16px;
     padding: 24px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    /* Dark modeda soya shart emas, light modeda chiroyli turadi */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
     margin-bottom: 20px;
     transition: all 0.3s ease;
 }
@@ -48,18 +60,14 @@ h2 {
     font-weight: 700;
     font-size: 24px;
     text-align: center;
+    color: var(--text-color);
 }
 
 .subtitle {
     text-align: center;
-    color: var(--gray-text);
+    color: var(--hint-color);
     margin-bottom: 24px;
     font-size: 14px;
-}
-
-.input-group {
-    margin-bottom: 16px;
-    text-align: left;
 }
 
 .input-group label {
@@ -67,49 +75,48 @@ h2 {
     margin-bottom: 8px;
     font-weight: 500;
     font-size: 14px;
-    color: var(--gray-text);
+    color: var(--hint-color);
 }
 
 input {
     width: 100%;
     padding: 14px;
-    border: 1px solid #e1e3e6;
+    border: 1px solid var(--border-color);
     border-radius: 12px;
     font-size: 16px;
     box-sizing: border-box;
     outline: none;
     transition: border-color 0.2s;
-    background: #fdfdfd;
+    background: var(--bg-color); /* Input foni asosiy fon bilan bir xil bo'ladi */
+    color: var(--text-color);
 }
 
 input:focus {
-    border-color: var(--tg-theme-button-color);
-    background: #fff;
+    border-color: var(--button-color);
 }
 
 /* Tugmalar */
 .primary-btn {
     width: 100%;
     padding: 16px;
-    background-color: var(--tg-theme-button-color);
-    color: var(--tg-theme-button-text-color);
+    background-color: var(--button-color);
+    color: var(--button-text-color);
     border: none;
     border-radius: 12px;
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
     margin-top: 10px;
-    transition: transform 0.1s, opacity 0.2s;
 }
 
 .primary-btn:active {
+    opacity: 0.8;
     transform: scale(0.98);
-    opacity: 0.9;
 }
 
 .finish-btn {
-    background-color: #2ecc71; /* Yashil rang yakunlash uchun */
-    margin-top: 20px;
+    background-color: #2ecc71; 
+    color: #fff;
 }
 
 /* Savollar dizayni */
@@ -118,27 +125,24 @@ input:focus {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-color);
     padding-bottom: 15px;
 }
 
 .quiz-header h3 {
     margin: 0;
     font-size: 18px;
+    color: var(--text-color);
 }
 
 .badge {
-    background: #eef4fa;
-    color: var(--tg-theme-button-color);
+    background: var(--bg-color);
+    color: var(--button-color);
     padding: 4px 10px;
     border-radius: 20px;
     font-size: 12px;
     font-weight: 600;
-}
-
-.question-block {
-    margin-bottom: 30px;
-    animation: slideIn 0.4s ease;
+    border: 1px solid var(--border-color);
 }
 
 .question-text {
@@ -146,52 +150,56 @@ input:focus {
     font-size: 17px;
     margin-bottom: 15px;
     line-height: 1.4;
+    color: var(--text-color);
 }
 
-/* Variantlar (Radio o'rniga chiroyli bloklar) */
+/* Variantlar */
 .option-label {
     display: flex;
     align-items: center;
     padding: 14px;
     margin-bottom: 10px;
-    border: 1px solid #eef2f5;
-    background: #f9fbfd;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color); /* Variant foni */
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s;
-    position: relative;
+    color: var(--text-color);
 }
 
 .option-label:hover {
-    background: #edf2f7;
+    opacity: 0.9;
 }
 
-/* Radio tugmani yashiramiz */
 .option-label input[type="radio"] {
     display: none;
 }
 
 /* Tanlangan holat */
 .option-label.selected {
-    background-color: rgba(51, 144, 236, 0.1);
-    border-color: var(--tg-theme-button-color);
-    color: var(--tg-theme-button-color);
-    font-weight: 500;
+    border-color: var(--button-color);
+    background-color: rgba(51, 144, 236, 0.1); /* Yengil ko'k fon */
 }
 
-/* Radio belgisi o'rniga kichik dumaloq */
+/* Agar dark mode bo'lsa tanlangan fon sal boshqacha bo'lsin */
+@media (prefers-color-scheme: dark) {
+    .option-label.selected {
+        background-color: rgba(51, 144, 236, 0.2);
+    }
+}
+
+.option-label.selected .option-circle {
+    border-color: var(--button-color);
+}
+
 .option-circle {
     width: 20px;
     height: 20px;
-    border: 2px solid #c4c8cc;
+    border: 2px solid var(--hint-color);
     border-radius: 50%;
     margin-right: 12px;
     flex-shrink: 0;
     position: relative;
-}
-
-.option-label.selected .option-circle {
-    border-color: var(--tg-theme-button-color);
 }
 
 .option-label.selected .option-circle::after {
@@ -199,7 +207,7 @@ input:focus {
     position: absolute;
     width: 10px;
     height: 10px;
-    background: var(--tg-theme-button-color);
+    background: var(--button-color);
     border-radius: 50%;
     top: 50%;
     left: 50%;
@@ -207,16 +215,9 @@ input:focus {
 }
 
 .hidden { display: none; }
-
-/* Animatsiyalar */
 .fade-in { animation: fadeIn 0.5s ease-in-out; }
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideIn {
-    from { opacity: 0; transform: translateX(20px); }
-    to { opacity: 1; transform: translateX(0); }
 }
