@@ -7,17 +7,20 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
 from aiohttp import web
 import aiohttp_cors
+
+# ==========================================
+# SOZLAMALAR (O'ZGARTIRISH ESINGIZDAN CHIQMASIN!)
+# ==========================================
 
 # --- SOZLAMALAR ---
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 1917817674  # <-- O'Z ID RAQAMINGIZNI YOZING! (userinfobot orqali oling)
 # Github Pages Linki
 WEB_APP_URL = "https://xushnid.github.io/super-test-bot/" 
-
-
+# ==========================================
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -30,12 +33,13 @@ cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)")
 cursor.execute("CREATE TABLE IF NOT EXISTS tests (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, questions TEXT, is_active INTEGER DEFAULT 0)")
 conn.commit()
 
-# --- STATES ---
+# --- STATES (Admin uchun) ---
 class TestState(StatesGroup):
     waiting_for_name = State()
     waiting_for_file = State()
 
-# --- YORDAMCHI FUNKSIYA (Menyuni chizish uchun) ---
+# --- YORDAMCHI FUNKSIYA (Menyuni chizish) ---
+# Bu funksiya "IndexError" bo'lmasligi uchun kerak
 async def refresh_test_menu(message: types.Message, test_id: int):
     cursor.execute("SELECT name, is_active FROM tests WHERE id = ?", (test_id,))
     test = cursor.fetchone()
@@ -61,7 +65,7 @@ async def refresh_test_menu(message: types.Message, test_id: int):
     except:
         pass
 
-# --- ADMIN PANEL ---
+# --- BOT HANDLERLARI ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -69,17 +73,28 @@ async def cmd_start(message: types.Message):
     cursor.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
     conn.commit()
 
+    # 1. HAMMA UCHUN (Admin uchun ham) ko'rinadigan "Test yechish" tugmasi
+    web_app_kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="✍️ Test yechish", web_app=WebAppInfo(url=WEB_APP_URL))]],
+        resize_keyboard=True
+    )
+
     if user_id == ADMIN_ID:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
+        # 2. ADMIN UCHUN qo'shimcha "Boshqaruv paneli"
+        admin_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⚙️ Testlarni boshqarish", callback_data="admin_tests")]
         ])
-        await message.answer(f"Salom Admin! Boshqaruv paneli:", reply_markup=kb)
+        
+        # Adminga 2 ta xabar boradi:
+        # Birinchisi: Pastdagi menyuni chiqaradi
+        await message.answer("Salom Admin! Testni sinash uchun pastdagi tugmani bosing 👇", reply_markup=web_app_kb)
+        # Ikkinchisi: Boshqaruv panelini chiqaradi
+        await message.answer("Yoki testlarni tahrirlang:", reply_markup=admin_kb)
     else:
-        kb = types.ReplyKeyboardMarkup(
-            keyboard=[[types.KeyboardButton(text="✍️ Test yechish", web_app=WebAppInfo(url=WEB_APP_URL))]],
-            resize_keyboard=True
-        )
-        await message.answer("Test yechish uchun tugmani bosing 👇", reply_markup=kb)
+        # Oddiy user faqat tugmani ko'radi
+        await message.answer("Test yechish uchun tugmani bosing 👇", reply_markup=web_app_kb)
+
+# --- ADMIN PANEL LOGIKASI ---
 
 @dp.callback_query(F.data == "admin_tests")
 async def view_tests(call: types.CallbackQuery, state: FSMContext):
@@ -114,6 +129,7 @@ async def receive_name(message: types.Message, state: FSMContext):
 
     await state.update_data(test_name=test_name)
     
+    # Xabarni yangilaymiz
     try:
         await bot.edit_message_text(
             chat_id=message.chat.id, 
@@ -122,7 +138,6 @@ async def receive_name(message: types.Message, state: FSMContext):
             parse_mode="HTML"
         )
     except:
-        # Agar eski xabarni topolmasa, yangi yozadi
         msg = await message.answer(f"✅ Nom: {test_name}\n\n📂 Endi <b>test.txt</b> faylini yuklang.")
         await state.update_data(msg_id=msg.message_id)
         
@@ -135,17 +150,20 @@ async def receive_file(message: types.Message, state: FSMContext):
     msg_id = data.get('msg_id')
     test_name = data.get('test_name')
 
+    # Faylni yuklab olish
     file_id = message.document.file_id
     file = await bot.get_file(file_id)
     file_content = await bot.download_file(file.file_path)
     json_content = file_content.read().decode('utf-8')
 
+    # JSON tekshirish
     try:
         json.loads(json_content)
     except:
-        await bot.send_message(chat_id=message.chat.id, text="❌ Fayl xato formatda! Iltimos to'g'ri JSON fayl yuklang.")
+        await message.answer("❌ Fayl xato formatda! Iltimos to'g'ri JSON fayl yuklang.")
         return
 
+    # Bazaga saqlash
     cursor.execute("INSERT INTO tests (name, questions, is_active) VALUES (?, ?, 0)", (test_name, json_content))
     conn.commit()
 
@@ -161,20 +179,18 @@ async def receive_file(message: types.Message, state: FSMContext):
         
     await state.clear()
 
-# --- TEST BOSHQARUVI (TUZATILGAN QISM) ---
+# --- TESTNI BOSHQARISH (Edit & Toggle) ---
 
 @dp.callback_query(F.data.startswith("edit_test_"))
 async def edit_single_test(call: types.CallbackQuery):
-    # edit_test_ID -> ID ni olamiz
     try:
         test_id = int(call.data.split("_")[2])
         await refresh_test_menu(call.message, test_id)
     except Exception as e:
-        print(f"Error in edit: {e}")
+        print(f"Edit error: {e}")
 
 @dp.callback_query(F.data.startswith("toggle_"))
 async def toggle_status(call: types.CallbackQuery):
-    # toggle_ID -> ID ni olamiz
     try:
         test_id = int(call.data.split("_")[1])
         
@@ -189,9 +205,10 @@ async def toggle_status(call: types.CallbackQuery):
             await call.answer("Status o'zgardi!")
             await refresh_test_menu(call.message, test_id)
     except Exception as e:
-        print(f"Error in toggle: {e}")
+        print(f"Toggle error: {e}")
 
-# --- WEB APP ---
+# --- WEB APP NATIJALARI ---
+
 @dp.message(F.web_app_data)
 async def handle_result(message: types.Message):
     data = json.loads(message.web_app_data.data)
@@ -199,21 +216,32 @@ async def handle_result(message: types.Message):
     student_name = data.get("student_name")
     score = data.get("score")
     total = data.get("total")
-    username = f"@{message.from_user.username}" if message.from_user.username else "yo'q"
+    username = f"@{message.from_user.username}" if message.from_user.username else "mavjud emas"
     
-    text = f"🏁 **Test Yakunlandi!**\n\n📚 {test_name}\n👤 {student_name}\n🔗 {username}\n✅ {score} / {total}"
+    text = (
+        f"🏁 **Test Yakunlandi!**\n\n"
+        f"📚 **Test:** {test_name}\n"
+        f"👤 **Talaba:** {student_name}\n"
+        f"🔗 **Username:** {username}\n"
+        f"✅ **Natija:** {score} / {total}"
+    )
     
+    # Talabaga javob
     await message.answer(text, parse_mode="Markdown")
+    
+    # Adminga nusxa yuborish (agar o'zi yechmagan bo'lsa)
     if message.from_user.id != ADMIN_ID:
-        try: await bot.send_message(chat_id=ADMIN_ID, text=f"🔔 **Yangi Natija!**\n\n{text}", parse_mode="Markdown")
-        except: pass
+        try: 
+            await bot.send_message(chat_id=ADMIN_ID, text=f"🔔 **Yangi Natija!**\n\n{text}", parse_mode="Markdown")
+        except: 
+            pass
 
-# --- SERVER VA START ---
+# --- SERVER QISMI (Render uchun) ---
 routes = web.RouteTableDef()
 
 @routes.get('/')
 async def hello(request):
-    return web.Response(text="Bot is running")
+    return web.Response(text="Bot ishlab turibdi 🚀")
 
 @routes.get('/api/tests')
 async def get_active_tests(request):
@@ -228,13 +256,23 @@ async def get_test_questions(request):
     row = cursor.fetchone()
     if row:
         return web.json_response({"name": row[1], "questions": json.loads(row[0])}, headers={"Access-Control-Allow-Origin": "*"})
-    return web.json_response({"error": "Test yo'q"}, status=404, headers={"Access-Control-Allow-Origin": "*"})
+    return web.json_response({"error": "Test topilmadi"}, status=404, headers={"Access-Control-Allow-Origin": "*"})
 
 async def start_server():
     app = web.Application()
     app.add_routes(routes)
-    cors = aiohttp_cors.setup(app, defaults={"*": aiohttp_cors.ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*", allow_methods="*")})
-    for route in list(app.router.routes()): cors.add(route)
+    
+    # CORS (Sayt va Bot gaplashishi uchun ruxsat)
+    cors = aiohttp_cors.setup(app, defaults={
+        "*": aiohttp_cors.ResourceOptions(
+            allow_credentials=True,
+            expose_headers="*",
+            allow_headers="*",
+            allow_methods="*",
+        )
+    })
+    for route in list(app.router.routes()):
+        cors.add(route)
     
     runner = web.AppRunner(app)
     await runner.setup()
