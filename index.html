@@ -2,31 +2,46 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Online Test</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; text-align: center; }
-        input { margin: 10px; padding: 10px; width: 80%; }
-        button { padding: 10px 20px; background: blue; color: white; border: none; cursor: pointer; margin-top: 20px;}
-        .hidden { display: none; }
-        .question { margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px; text-align: left;}
-    </style>
+    <!-- Google Fonts: Inter shrifti -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- 1. Ro'yxatdan o'tish -->
-    <div id="login-form">
-        <h3>Ma'lumotlaringizni kiriting</h3>
-        <input type="text" id="name" placeholder="Ism Familiya" required>
-        <input type="text" id="group" placeholder="Guruh" required>
-        <button onclick="startTest()">Testni Boshlash</button>
-    </div>
 
-    <!-- 2. Test jarayoni -->
-    <div id="quiz-form" class="hidden">
-        <h3>Savollarni yeching:</h3>
-        <div id="questions"></div>
-        <button onclick="finishTest()">Testni Yakunlash</button>
+    <div class="container">
+        <!-- 1. Kirish oynasi -->
+        <div id="login-screen" class="card fade-in">
+            <div class="header-icon">📝</div>
+            <h2>Xush kelibsiz!</h2>
+            <p class="subtitle">Testni boshlash uchun ma'lumotlaringizni kiriting.</p>
+            
+            <div class="input-group">
+                <label>Ism Familiya</label>
+                <input type="text" id="name" placeholder="Masalan: Ali Valiyev" autocomplete="off">
+            </div>
+
+            <div class="input-group">
+                <label>Guruh</label>
+                <input type="text" id="group" placeholder="Masalan: 215-guruh" autocomplete="off">
+            </div>
+
+            <button onclick="startTest()" class="primary-btn">Boshlash</button>
+        </div>
+
+        <!-- 2. Test oynasi -->
+        <div id="quiz-screen" class="card hidden">
+            <div class="quiz-header">
+                <h3>Test Sinovi</h3>
+                <span class="badge">5 ta savol</span>
+            </div>
+            
+            <div id="questions-container"></div>
+            
+            <button onclick="finishTest()" class="primary-btn finish-btn">Yakunlash va Yuborish</button>
+        </div>
     </div>
 
     <script src="script.js"></script>
