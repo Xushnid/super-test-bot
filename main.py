@@ -145,15 +145,13 @@ async def receive_file(message: types.Message, state: FSMContext):
     await bot.edit_message_text(chat_id=message.chat.id, message_id=msg_id, text=f"✅ <b>{test_name}</b> muvaffaqiyatli qo'shildi!", reply_markup=kb, parse_mode="HTML")
     await state.clear()
 
-# 6. Testni boshqarish (Aktiv/Deaktiv)
-@dp.callback_query(F.data.startswith("edit_test_"))
-async def edit_single_test(call: types.CallbackQuery):
-    test_id = int(call.data.split("_")[2])
+# --- Yordamchi funksiya (Menyuni yangilash uchun) ---
+async def refresh_test_menu(message: types.Message, test_id: int):
     cursor.execute("SELECT name, is_active FROM tests WHERE id = ?", (test_id,))
     test = cursor.fetchone()
     
     if not test:
-        await call.answer("Test topilmadi", show_alert=True)
+        await message.edit_text("❌ Test topilmadi.")
         return
 
     name, is_active = test
@@ -163,97 +161,35 @@ async def edit_single_test(call: types.CallbackQuery):
     btn_status = InlineKeyboardButton(text="🔴 O'chirish" if is_active else "🟢 Yoqish", callback_data=f"toggle_{test_id}")
     btn_back = InlineKeyboardButton(text="🔙 Ortga", callback_data="admin_tests")
     
-    await call.message.edit_text(
+    await message.edit_text(
         f"⚙️ <b>Test sozlamalari:</b>\n\n🆔 ID: {test_id}\n📝 Nom: {name}\n📊 Holat: {status_text}", 
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn_status], [btn_back]]),
         parse_mode="HTML"
     )
 
-# 7. Statusni o'zgartirish
+# 6. Testni boshqarish (Ro'yxatdan tanlaganda)
+@dp.callback_query(F.data.startswith("edit_test_"))
+async def edit_single_test(call: types.CallbackQuery):
+    # edit_test_1 -> ['edit', 'test', '1'] -> ID = 1
+    test_id = int(call.data.split("_")[2])
+    await refresh_test_menu(call.message, test_id)
+
+# 7. Statusni o'zgartirish (Yoqish/O'chirish bosilganda)
 @dp.callback_query(F.data.startswith("toggle_"))
 async def toggle_status(call: types.CallbackQuery):
+    # toggle_1 -> ['toggle', '1'] -> ID = 1
     test_id = int(call.data.split("_")[1])
+    
+    # Statusni o'zgartirish
     cursor.execute("SELECT is_active FROM tests WHERE id = ?", (test_id,))
     current_status = cursor.fetchone()[0]
-    
     new_status = 0 if current_status else 1
+    
     cursor.execute("UPDATE tests SET is_active = ? WHERE id = ?", (new_status, test_id))
     conn.commit()
     
-    # Menyuni yangilash uchun edit_single_test ni qayta chaqiramiz
-    await edit_single_test(call) # Recursion emulyatsiyasi (Data o'zgartirib chaqirish kerak aslida, lekin bu yerda call.data edit_test_ID ga o'xshash bo'lishi kerak)
-    # Oson yo'li: shunchaki xabar berib, yana menyuni chizish
+    # Bot "OK" deb javob qaytaradi (aylanib turmasligi uchun)
     await call.answer("Status o'zgardi!")
-
-# --- WEB APP NATIJASINI QABUL QILISH ---
-@dp.message(F.web_app_data)
-async def handle_result(message: types.Message):
-    data = json.loads(message.web_app_data.data)
     
-    test_name = data.get("test_name")
-    student_name = data.get("student_name") # Formadan kelgan ism
-    score = data.get("score")
-    total = data.get("total")
-    
-    username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
-    
-    result_text = (
-        f"🏁 **Test Yakunlandi!**\n\n"
-        f"📚 **Test:** {test_name}\n"
-        f"👤 **Talaba:** {student_name}\n"
-        f"🔗 **Username:** {username}\n"
-        f"✅ **Natija:** {score} / {total}"
-    )
-
-    # 1. Talabaga yuborish
-    await message.answer(result_text, parse_mode="Markdown")
-    
-    # 2. Adminga yuborish
-    if message.from_user.id != ADMIN_ID:
-        await bot.send_message(chat_id=ADMIN_ID, text=f"🔔 **Yangi Natija!**\n\n{result_text}", parse_mode="Markdown")
-
-
-# --- API QISMI (Render Server + API) ---
-routes = web.RouteTableDef()
-
-@routes.get('/')
-async def hello(request):
-    return web.Response(text="Bot is running")
-
-# 1. Aktiv testlar ro'yxatini berish
-@routes.get('/api/tests')
-async def get_active_tests(request):
-    cursor.execute("SELECT id, name FROM tests WHERE is_active = 1")
-    tests = cursor.fetchall()
-    tests_json = [{"id": t[0], "name": t[1]} for t in tests]
-    return web.json_response(tests_json, headers={"Access-Control-Allow-Origin": "*"})
-
-# 2. Konkret bitta test savollarini berish
-@routes.get('/api/test/{id}')
-async def get_test_questions(request):
-    test_id = request.match_info['id']
-    cursor.execute("SELECT questions, name FROM tests WHERE id = ? AND is_active = 1", (test_id,))
-    row = cursor.fetchone()
-    
-    if row:
-        questions = json.loads(row[0])
-        return web.json_response({"name": row[1], "questions": questions}, headers={"Access-Control-Allow-Origin": "*"})
-    else:
-        return web.json_response({"error": "Test topilmadi"}, status=404, headers={"Access-Control-Allow-Origin": "*"})
-
-async def start_server():
-    app = web.Application()
-    app.add_routes(routes)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 8080))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-
-async def main():
-    await start_server()
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    if TOKEN:
-        asyncio.run(main())
+    # Menyuni yangilaymiz (endi xato bermaydi)
+    await refresh_test_menu(call.message, test_id)
