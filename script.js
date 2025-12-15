@@ -1,50 +1,82 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
-tg.MainButton.textColor = '#FFFFFF';
-tg.MainButton.color = '#2ecc71';
 
-// Savollar bazasi
-const questionsData = [
-    { q: "HTML qanday tushuniladi?", a: ["Hyper Text Markup Language", "Home Tool Markup Language", "Hyperlinks and Text Marking"], c: 0 },
-    { q: "CSS nima uchun ishlatiladi?", a: ["Ma'lumotlar bazasi", "Veb sahifa dizayni", "Serverni boshqarish"], c: 1 },
-    { q: "JavaScript qayerda ishlaydi?", a: ["Faqat Serverda", "Faqat Brauzerda", "Brauzer va Serverda"], c: 2 },
-    { q: "Eng katta sarlavha qaysi?", a: ["h6", "h1", "head"], c: 1 },
-    { q: "<a> tegi nima vazifani bajaradi?", a: ["Rasm qo'yish", "Havola (link) yaratish", "Matnni qalin qilish"], c: 1 }
-];
+// DIQQAT: Render.com dagi saytingiz manzilini shu yerga qo'ying!
+// Oxirida / belgisini olib tashlang.
+const API_URL = "https://super-test-bot.onrender.com"; 
 
-function startTest() {
-    const name = document.getElementById("name").value.trim();
-    const group = document.getElementById("group").value.trim();
+let currentQuestions = [];
+let currentTestName = "";
+
+// 1. Sahifa ochilganda testlarni yuklaymiz
+document.addEventListener("DOMContentLoaded", () => {
+    fetch(`${API_URL}/api/tests`)
+        .then(res => res.json())
+        .then(tests => {
+            document.getElementById("loader").classList.add("hidden");
+            const container = document.getElementById("tests-container");
+            const listScreen = document.getElementById("test-list-screen");
+            
+            if(tests.length === 0) {
+                container.innerHTML = "<p>Hozircha aktiv testlar yo'q.</p>";
+            } else {
+                tests.forEach(test => {
+                    const btn = document.createElement("button");
+                    btn.className = "primary-btn";
+                    btn.style.marginBottom = "10px";
+                    btn.innerText = test.name;
+                    btn.onclick = () => selectTest(test.id);
+                    container.appendChild(btn);
+                });
+            }
+            listScreen.classList.remove("hidden");
+        })
+        .catch(err => {
+            document.getElementById("loader").innerHTML = "<p>Xatolik: Serverga ulanib bo'lmadi.</p>";
+        });
+});
+
+// 2. Test tanlanganda savollarni yuklaymiz
+function selectTest(id) {
+    document.getElementById("test-list-screen").classList.add("hidden");
+    document.getElementById("loader").classList.remove("hidden");
     
-    if (!name || !group) {
-        tg.showAlert("Iltimos, ism va guruhni to'liq kiriting!");
-        return;
-    }
+    fetch(`${API_URL}/api/test/${id}`)
+        .then(res => res.json())
+        .then(data => {
+            currentQuestions = data.questions;
+            currentTestName = data.name;
+            
+            document.getElementById("loader").classList.add("hidden");
+            document.getElementById("selected-test-name").innerText = data.name;
+            document.getElementById("login-screen").classList.remove("hidden");
+        });
+}
 
-    // Ekranni almashtirish
-    document.getElementById("login-screen").style.display = "none";
-    const quizScreen = document.getElementById("quiz-screen");
-    quizScreen.style.display = "block";
-    quizScreen.classList.add("fade-in");
+// 3. Testni boshlash (Login dan o'tish)
+function startQuiz() {
+    const name = document.getElementById("student_name").value;
+    if(!name) { tg.showAlert("Ismingizni kiriting!"); return; }
+
+    document.getElementById("login-screen").classList.add("hidden");
+    document.getElementById("quiz-screen").classList.remove("hidden");
     
     renderQuestions();
 }
 
+// 4. Savollarni chizish
 function renderQuestions() {
     const container = document.getElementById("questions-container");
     container.innerHTML = "";
+    document.getElementById("q-count").innerText = `${currentQuestions.length} ta`;
 
-    questionsData.forEach((item, index) => {
+    currentQuestions.forEach((item, index) => {
         let html = `
         <div class="question-block">
             <div class="question-text">${index + 1}. ${item.q}</div>
-            <div class="options">
-        `;
+            <div class="options">`;
         
         item.a.forEach((opt, i) => {
-            // Har bir variant uchun unikal ID
-            const inputId = `q${index}_opt${i}`;
-            
             html += `
             <label class="option-label" onclick="selectOption(this, 'q${index}')">
                 <span class="option-circle"></span>
@@ -52,55 +84,30 @@ function renderQuestions() {
                 <span>${opt}</span>
             </label>`;
         });
-        
         html += `</div></div>`;
         container.innerHTML += html;
     });
 }
 
-// Variant tanlanganda rangini o'zgartirish funksiyasi
-function selectOption(label, questionName) {
-    // Avval shu savoldagi barcha belgilarni tozalaymiz
-    const allLabels = document.querySelectorAll(`input[name="${questionName}"]`);
-    allLabels.forEach(input => {
-        input.parentElement.classList.remove("selected");
-    });
-
-    // Bosilganini belgilaymiz
+function selectOption(label, name) {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(inp => inp.parentElement.classList.remove("selected"));
     label.classList.add("selected");
-    // Radio inputni ham belgilab qo'yamiz (xavfsizlik uchun)
-    const radio = label.querySelector("input");
-    radio.checked = true;
+    label.querySelector("input").checked = true;
 }
 
+// 5. Yakunlash
 function finishTest() {
     let score = 0;
-    let unanswered = false;
-
-    questionsData.forEach((item, index) => {
+    currentQuestions.forEach((item, index) => {
         const checked = document.querySelector(`input[name="q${index}"]:checked`);
-        if (checked) {
-            if (parseInt(checked.value) === item.c) score++;
-        } else {
-            unanswered = true;
-        }
+        if (checked && parseInt(checked.value) === item.c) score++;
     });
 
-    if (unanswered) {
-        tg.showConfirm("Barcha savollarga javob bermadingiz. Baribir yakunlaymizmi?", (confirm) => {
-            if (confirm) sendData(score);
-        });
-    } else {
-        sendData(score);
-    }
-}
-
-function sendData(score) {
     const data = {
-        name: document.getElementById("name").value,
-        group: document.getElementById("group").value,
+        test_name: currentTestName,
+        student_name: document.getElementById("student_name").value,
         score: score,
-        total: questionsData.length
+        total: currentQuestions.length
     };
     
     tg.sendData(JSON.stringify(data));
