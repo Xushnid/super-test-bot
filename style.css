@@ -1,1 +1,222 @@
-aiogram
+:root {
+    --tg-theme-bg-color: #f2f2f6;
+    --tg-theme-button-color: #3390ec;
+    --tg-theme-button-text-color: #ffffff;
+    --tg-theme-text-color: #000000;
+    --card-bg: #ffffff;
+    --gray-text: #707579;
+    --border-radius: 16px;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--tg-theme-bg-color);
+    color: var(--tg-theme-text-color);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent; /* Mobil bosganda ko'k ramka chiqmasligi uchun */
+}
+
+.container {
+    width: 100%;
+    max-width: 450px;
+}
+
+.card {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+}
+
+/* Kirish qismi */
+.header-icon {
+    font-size: 48px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+h2 {
+    margin: 0 0 8px 0;
+    font-weight: 700;
+    font-size: 24px;
+    text-align: center;
+}
+
+.subtitle {
+    text-align: center;
+    color: var(--gray-text);
+    margin-bottom: 24px;
+    font-size: 14px;
+}
+
+.input-group {
+    margin-bottom: 16px;
+    text-align: left;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--gray-text);
+}
+
+input {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid #e1e3e6;
+    border-radius: 12px;
+    font-size: 16px;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.2s;
+    background: #fdfdfd;
+}
+
+input:focus {
+    border-color: var(--tg-theme-button-color);
+    background: #fff;
+}
+
+/* Tugmalar */
+.primary-btn {
+    width: 100%;
+    padding: 16px;
+    background-color: var(--tg-theme-button-color);
+    color: var(--tg-theme-button-text-color);
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: transform 0.1s, opacity 0.2s;
+}
+
+.primary-btn:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
+
+.finish-btn {
+    background-color: #2ecc71; /* Yashil rang yakunlash uchun */
+    margin-top: 20px;
+}
+
+/* Savollar dizayni */
+.quiz-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #f0f0f0;
+    padding-bottom: 15px;
+}
+
+.quiz-header h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.badge {
+    background: #eef4fa;
+    color: var(--tg-theme-button-color);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.question-block {
+    margin-bottom: 30px;
+    animation: slideIn 0.4s ease;
+}
+
+.question-text {
+    font-weight: 600;
+    font-size: 17px;
+    margin-bottom: 15px;
+    line-height: 1.4;
+}
+
+/* Variantlar (Radio o'rniga chiroyli bloklar) */
+.option-label {
+    display: flex;
+    align-items: center;
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid #eef2f5;
+    background: #f9fbfd;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.option-label:hover {
+    background: #edf2f7;
+}
+
+/* Radio tugmani yashiramiz */
+.option-label input[type="radio"] {
+    display: none;
+}
+
+/* Tanlangan holat */
+.option-label.selected {
+    background-color: rgba(51, 144, 236, 0.1);
+    border-color: var(--tg-theme-button-color);
+    color: var(--tg-theme-button-color);
+    font-weight: 500;
+}
+
+/* Radio belgisi o'rniga kichik dumaloq */
+.option-circle {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #c4c8cc;
+    border-radius: 50%;
+    margin-right: 12px;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.option-label.selected .option-circle {
+    border-color: var(--tg-theme-button-color);
+}
+
+.option-label.selected .option-circle::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--tg-theme-button-color);
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.hidden { display: none; }
+
+/* Animatsiyalar */
+.fade-in { animation: fadeIn 0.5s ease-in-out; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
