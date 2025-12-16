@@ -167,17 +167,36 @@ function submitResult(score) {
     btn.disabled = true;
     btn.innerText = "Yuborilmoqda...";
 
-    const data = {
-        test_code: testCode,
-        student_name: document.getElementById("student_name").value || "Noma'lum",
-        score: score,
-        total: questions.length
-    };
-    
-    tg.sendData(JSON.stringify(data));
-    
-    // Telegram yopilib ketishi uchun ozgina vaqt beramiz
-    setTimeout(() => {
-        tg.close();
-    }, 1500); 
+    // Serverga to'g'ridan-to'g'ri yuborish
+    fetch(`${API_URL}/api/submit_result`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            test_code: testCode,
+            userId: userId,
+            student_name: document.getElementById("student_name").value || "Noma'lum",
+            score: score,
+            total: questions.length
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === "ok") {
+            // Muvaffaqiyatli
+            localStorage.setItem(`finished_${testCode}_${userId}`, "true");
+            alert("Natija yuborildi! ✅");
+            tg.close();
+        } else {
+            alert("Xatolik: " + (data.error || "Noma'lum xato"));
+            btn.disabled = false;
+            btn.innerText = "Qayta urinish";
+        }
+    })
+    .catch(err => {
+        alert("Internet xatosi! Qayta urining.");
+        btn.disabled = false;
+        btn.innerText = "Qayta urinish";
+    });
 }
