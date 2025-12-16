@@ -11,41 +11,42 @@ let timerInterval;
 
 const urlParams = new URLSearchParams(window.location.search);
 testCode = urlParams.get('code');
-userId = urlParams.get('userId'); // Botdan kelgan ID
+userId = urlParams.get('userId');
 
 document.addEventListener("DOMContentLoaded", () => {
-    if (!testCode) {
-        document.body.innerHTML = "<h3>Xatolik: Kod yo'q</h3>";
-        return;
-    }
-    
-    // Lokal xotirani tekshirish: Agar bu user bu testni tugatgan bo'lsa
-    if (localStorage.getItem(`finished_${testCode}_${userId}`)) {
-        document.body.innerHTML = "<h3 style='text-align:center; margin-top:50px; color:green'>Siz testni yakunlagansiz! ✅</h3><button onclick='tg.close()' class='primary-btn' style='margin:20px auto; display:block'>Chiqish</button>";
-        return;
-    }
-
+    if (!testCode) return document.body.innerHTML = "<h3>Xatolik: Kod yo'q</h3>";
     loadTest();
 });
 
 function loadTest() {
-    // API ga user_id ni ham jo'natamiz
     fetch(`${API_URL}/api/get_test?code=${testCode}&userId=${userId}`)
         .then(res => res.json())
         .then(data => {
             if (data.error) {
-                let msg = "Test topilmadi!";
+                let msg = "Xatolik!";
                 if (data.error === "expired") msg = "Vaqt tugagan!";
-                if (data.error === "submitted") msg = "Siz allaqachon topshirgansiz!";
-                
+                if (data.error === "submitted") msg = "Siz bu testni yechib bo'lgansiz!";
                 alert(msg);
                 tg.close();
                 return;
             }
             
             document.getElementById("test-title").innerText = data.name;
-            remainingSeconds = data.remaining_seconds;
             
+            // ANTI-RELOAD TIZIMI
+            // 1. Oldin saqlangan vaqt bormi?
+            const savedEndTime = localStorage.getItem(`end_${testCode}_${userId}`);
+            const now = Math.floor(Date.now() / 1000);
+            
+            if (savedEndTime) {
+                // Agar bor bo'lsa, qolgan vaqtni hisoblaymiz
+                remainingSeconds = parseInt(savedEndTime) - now;
+            } else {
+                // Yo'q bo'lsa, server vaqtini olib, xotiraga yozamiz
+                remainingSeconds = data.remaining_seconds;
+                localStorage.setItem(`end_${testCode}_${userId}`, (now + remainingSeconds).toString());
+            }
+
             questions = shuffleArray(data.questions).map(q => {
                 let optionsObj = q.a.map((opt, i) => ({ text: opt, originalIndex: i }));
                 return { q: q.q, options: shuffleArray(optionsObj), correctIndex: q.c };
@@ -54,12 +55,12 @@ function loadTest() {
             document.getElementById("login-screen").classList.remove("hidden");
             startTimer();
         })
-        .catch(err => alert("Server xatosi: " + err));
+        .catch(err => alert("Tarmoq xatosi!"));
 }
 
 function startQuiz() {
     const name = document.getElementById("student_name").value;
-    if (!name) { tg.showAlert("Ismingizni kiriting!"); return; }
+    if (!name) { tg.showAlert("Ism kiriting!"); return; }
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("quiz-screen").classList.remove("hidden");
     renderQuestions();
@@ -102,7 +103,7 @@ function shuffleArray(array) {
 
 function startTimer() {
     const timerDisplay = document.createElement("div");
-    timerDisplay.style.cssText = "position:fixed; top:10px; right:10px; background:red; color:white; padding:5px 10px; border-radius:5px; font-weight:bold; z-index:1000";
+    timerDisplay.className = "timer-float";
     timerDisplay.id = "timer-display";
     document.body.appendChild(timerDisplay);
 
@@ -124,55 +125,47 @@ function startTimer() {
 function finishTest(force = false) {
     clearInterval(timerInterval);
     document.getElementById("timer-display")?.remove();
+    // Test tugadi, xotirani tozaylaymiz
+    localStorage.removeItem(`end_${testCode}_${userId}`);
+
     let score = 0;
-    
     questions.forEach((item, index) => {
         const selectedLabel = document.querySelector(`input[name="q${index}"]:checked`)?.parentElement;
         const qBlock = document.getElementById(`qblock-${index}`);
-        
         const allLabels = qBlock.querySelectorAll(".option-label");
+        
         allLabels.forEach(lbl => {
-            if (parseInt(lbl.dataset.origIndex) === item.correctIndex) {
-                lbl.classList.add("correct-answer-show");
-            }
+            if (parseInt(lbl.dataset.origIndex) === item.correctIndex) lbl.classList.add("correct-answer-show");
             lbl.style.pointerEvents = "none";
         });
 
         if (selectedLabel) {
             if (parseInt(selectedLabel.dataset.origIndex) === item.correctIndex) {
                 score++;
-                selectedLabel.style.background = "#d4edda"; selectedLabel.style.borderColor = "#28a745";
+                selectedLabel.classList.add("correct");
             } else {
-                selectedLabel.style.background = "#f8d7da"; selectedLabel.style.borderColor = "#dc3545";
+                selectedLabel.classList.add("wrong");
             }
         }
     });
 
-    // 1. Tugmani almashtiramiz
-    const finishBtn = document.querySelector(".finish-btn");
-    finishBtn.style.display = "none";
-
-    // 2. Yangi tugma yaratamiz (Send Data uchun)
-    const sendBtn = document.createElement("button");
-    sendBtn.innerText = "📤 Natijani Yuborish va Chiqish";
-    sendBtn.className = "primary-btn";
-    sendBtn.style.backgroundColor = "#ff9800"; // Oranjevoy
-    sendBtn.style.marginTop = "20px";
-    sendBtn.onclick = () => submitResult(score);
+    document.querySelector(".finish-btn").style.display = "none";
     
+    // YUBORISH TUGMASI (Katta va Aniq)
+    const sendBtn = document.createElement("button");
+    sendBtn.innerHTML = "📤 Natijani Yuborish va Chiqish";
+    sendBtn.className = "primary-btn send-result-btn";
+    sendBtn.onclick = () => submitResult(score);
     document.getElementById("quiz-screen").appendChild(sendBtn);
 
-    // 3. Natijani tepada ko'rsatamiz
-    const header = document.querySelector(".quiz-header");
-    header.innerHTML = `<h3>Natija: ${score} / ${questions.length}</h3>`;
+    document.querySelector(".quiz-header").innerHTML = `<h3>Natija: ${score} / ${questions.length}</h3>`;
     window.scrollTo(0,0);
 }
 
 function submitResult(score) {
-    // Lokal xotiraga yozib qo'yamiz (qayta kirmasligi uchun)
-    if(testCode && userId) {
-        localStorage.setItem(`finished_${testCode}_${userId}`, "true");
-    }
+    const btn = document.querySelector(".send-result-btn");
+    btn.disabled = true;
+    btn.innerText = "Yuborilmoqda...";
 
     const data = {
         test_code: testCode,
@@ -180,7 +173,11 @@ function submitResult(score) {
         score: score,
         total: questions.length
     };
+    
     tg.sendData(JSON.stringify(data));
-    // Ehtiyot shart tg.close() ni ham chaqiramiz
-    setTimeout(() => tg.close(), 500);
+    
+    // Telegram yopilib ketishi uchun ozgina vaqt beramiz
+    setTimeout(() => {
+        tg.close();
+    }, 1500); 
 }
