@@ -20,7 +20,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 ADMIN_ID = 1917817674  # <-- O'Z ID RAQAMINGIZNI YOZING! (userinfobot orqali oling)
 # Github Pages Linki
-WEB_APP_URL = "https://xushnid.github.io/super-test-bot
+WEB_APP_URL = "https://xushnid.github.io/super-test-bot"
 # ==========================================
 
 bot = Bot(token=TOKEN)
