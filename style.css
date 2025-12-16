@@ -1,223 +1,87 @@
 :root {
-    /* Telegramning o'z o'zgaruvchilaridan foydalanamiz */
-    --bg-color: var(--tg-theme-bg-color, #efeff3); 
-    --text-color: var(--tg-theme-text-color, #000000);
-    --hint-color: var(--tg-theme-hint-color, #999999);
-    --button-color: var(--tg-theme-button-color, #3390ec);
-    --button-text-color: var(--tg-theme-button-text-color, #ffffff);
-    
-    /* Kartochkalar uchun rang (Dark va Light rejim uchun) */
-    --card-bg: var(--tg-theme-secondary-bg-color, #ffffff);
-    --input-bg: var(--tg-theme-bg-color, #f7f7f7);
-    --border-color: rgba(0, 0, 0, 0.1);
-}
-
-/* Dark mode uchun maxsus to'g'irlashlar */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --border-color: rgba(255, 255, 255, 0.15);
-    }
+    --bg-color: var(--tg-theme-bg-color, #f5f5f5);
+    --text-color: var(--tg-theme-text-color, #000);
+    --card-bg: var(--tg-theme-secondary-bg-color, #fff);
+    --btn-color: var(--tg-theme-button-color, #3390ec);
+    --btn-text: var(--tg-theme-button-text-color, #fff);
 }
 
 body {
     font-family: 'Inter', sans-serif;
-    background-color: var(--bg-color);
+    background: var(--bg-color);
     color: var(--text-color);
-    margin: 0;
-    padding: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    min-height: 100vh;
-    box-sizing: border-box;
+    margin: 0; padding: 15px;
     -webkit-tap-highlight-color: transparent;
 }
 
-.container {
-    width: 100%;
-    max-width: 450px;
-}
+.container { max-width: 600px; margin: 0 auto; }
 
 .card {
     background: var(--card-bg);
-    border-radius: 16px;
-    padding: 24px;
-    /* Dark modeda soya shart emas, light modeda chiroyli turadi */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
-    margin-bottom: 20px;
-    transition: all 0.3s ease;
-}
-
-/* Kirish qismi */
-.header-icon {
-    font-size: 48px;
-    margin-bottom: 10px;
-    text-align: center;
-}
-
-h2 {
-    margin: 0 0 8px 0;
-    font-weight: 700;
-    font-size: 24px;
-    text-align: center;
-    color: var(--text-color);
-}
-
-.subtitle {
-    text-align: center;
-    color: var(--hint-color);
-    margin-bottom: 24px;
-    font-size: 14px;
-}
-
-.input-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-    font-size: 14px;
-    color: var(--hint-color);
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 input {
-    width: 100%;
-    padding: 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
+    width: 100%; padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 8px;
     font-size: 16px;
-    box-sizing: border-box;
-    outline: none;
-    transition: border-color 0.2s;
-    background: var(--bg-color); /* Input foni asosiy fon bilan bir xil bo'ladi */
-    color: var(--text-color);
+    box-sizing: border-box; /* Mobil uchun muhim */
 }
 
-input:focus {
-    border-color: var(--button-color);
-}
-
-/* Tugmalar */
 .primary-btn {
-    width: 100%;
-    padding: 16px;
-    background-color: var(--button-color);
-    color: var(--button-text-color);
-    border: none;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    margin-top: 10px;
+    width: 100%; padding: 14px;
+    background: var(--btn-color);
+    color: var(--btn-text);
+    border: none; border-radius: 8px;
+    font-size: 16px; font-weight: 600;
+    cursor: pointer; margin-top: 10px;
 }
 
-.primary-btn:active {
-    opacity: 0.8;
-    transform: scale(0.98);
-}
+.question-block { margin-bottom: 25px; }
+.question-text { font-weight: 600; font-size: 16px; margin-bottom: 10px; }
 
-.finish-btn {
-    background-color: #2ecc71; 
-    color: #fff;
-}
-
-/* Savollar dizayni */
-.quiz-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 15px;
-}
-
-.quiz-header h3 {
-    margin: 0;
-    font-size: 18px;
-    color: var(--text-color);
-}
-
-.badge {
-    background: var(--bg-color);
-    color: var(--button-color);
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    border: 1px solid var(--border-color);
-}
-
-.question-text {
-    font-weight: 600;
-    font-size: 17px;
-    margin-bottom: 15px;
-    line-height: 1.4;
-    color: var(--text-color);
-}
-
-/* Variantlar */
 .option-label {
-    display: flex;
-    align-items: center;
-    padding: 14px;
-    margin-bottom: 10px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-color); /* Variant foni */
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: var(--text-color);
+    display: flex; align-items: center;
+    padding: 12px; margin-bottom: 8px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: var(--card-bg);
 }
-
-.option-label:hover {
-    opacity: 0.9;
-}
-
-.option-label input[type="radio"] {
-    display: none;
-}
-
-/* Tanlangan holat */
-.option-label.selected {
-    border-color: var(--button-color);
-    background-color: rgba(51, 144, 236, 0.1); /* Yengil ko'k fon */
-}
-
-/* Agar dark mode bo'lsa tanlangan fon sal boshqacha bo'lsin */
-@media (prefers-color-scheme: dark) {
-    .option-label.selected {
-        background-color: rgba(51, 144, 236, 0.2);
-    }
-}
-
-.option-label.selected .option-circle {
-    border-color: var(--button-color);
-}
-
+.option-label.selected { border-color: var(--btn-color); background: rgba(51, 144, 236, 0.1); }
+.option-label input { display: none; }
 .option-circle {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--hint-color);
-    border-radius: 50%;
-    margin-right: 12px;
-    flex-shrink: 0;
-    position: relative;
+    width: 18px; height: 18px;
+    border: 2px solid #999; border-radius: 50%;
+    margin-right: 10px; flex-shrink: 0;
 }
+.option-label.selected .option-circle { border-color: var(--btn-color); background: var(--btn-color); }
 
-.option-label.selected .option-circle::after {
-    content: '';
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background: var(--button-color);
-    border-radius: 50%;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+/* Natijalar ranglari */
+.correct-answer-show { border: 2px solid #28a745 !important; background: #d4edda; }
+.option-label.correct { background: #d4edda !important; }
+.option-label.wrong { background: #f8d7da !important; }
+
+/* Suzuvchi Taymer */
+.timer-float {
+    position: fixed; top: 10px; right: 10px;
+    background: #ff3b30; color: #fff;
+    padding: 6px 12px; border-radius: 20px;
+    font-weight: bold; font-size: 14px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000;
 }
 
 .hidden { display: none; }
-.fade-in { animation: fadeIn 0.5s ease-in-out; }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+/* Mobil uchun moslashish */
+@media (max-width: 480px) {
+    body { padding: 10px; }
+    .card { padding: 15px; }
+    h2 { font-size: 20px; }
+    .question-text { font-size: 15px; }
+    .option-label { padding: 10px; font-size: 14px; }
 }
