@@ -1,22 +1,20 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// Render Serveringiz manzili (oxirida / bo'lmasin)
+// DIQQAT: Render linkingizni qo'ying
 const API_URL = "https://super-test-bot.onrender.com"; 
 
 let questions = [];
 let testCode = "";
-let endTimeStr = "";
+let remainingSeconds = 0; // Serverdan keladi
 let timerInterval;
 
-// URL dan kodni olish (?code=12345)
 const urlParams = new URLSearchParams(window.location.search);
 testCode = urlParams.get('code');
 
-// Boshlanishda
 document.addEventListener("DOMContentLoaded", () => {
     if (!testCode) {
-        document.body.innerHTML = "<h3 style='text-align:center; margin-top:50px;'>Xatolik: Test kodi yo'q</h3>";
+        document.body.innerHTML = "<h3>Xatolik: Kod yo'q</h3>";
         return;
     }
     loadTest();
@@ -27,40 +25,33 @@ function loadTest() {
         .then(res => res.json())
         .then(data => {
             if (data.error) {
-                alert("Test topilmadi!");
+                alert(data.error === "Time expired" ? "Vaqt tugagan!" : "Test topilmadi!");
                 tg.close();
                 return;
             }
             
             document.getElementById("test-title").innerText = data.name;
-            endTimeStr = data.end_time;
+            remainingSeconds = data.remaining_seconds;
             
-            // Savollarni aralashtirish
+            // Random savollar
             questions = shuffleArray(data.questions).map(q => {
-                // Javoblarni ham aralashtirish, lekin to'g'ri javob indeksini yo'qotmaslik kerak
-                // Buning uchun javob obyektini o'zgartiramiz: {text: "Javob", originalIndex: 0}
                 let optionsObj = q.a.map((opt, i) => ({ text: opt, originalIndex: i }));
-                let shuffledOptions = shuffleArray(optionsObj);
-                
                 return {
                     q: q.q,
-                    options: shuffledOptions,
-                    correctIndex: q.c // Bu original indeks
+                    options: shuffleArray(optionsObj),
+                    correctIndex: q.c
                 };
             });
 
             document.getElementById("login-screen").classList.remove("hidden");
-            startTimer();
+            startTimer(); // Taymerni darhol ishga tushiramiz (fondagi hisob)
         })
-        .catch(err => {
-            alert("Server xatosi: " + err);
-        });
+        .catch(err => alert("Xato: " + err));
 }
 
 function startQuiz() {
     const name = document.getElementById("student_name").value;
-    if (!name) { tg.showAlert("Ismingizni kiriting!"); return; }
-
+    if (!name) { tg.showAlert("Ism kiriting!"); return; }
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("quiz-screen").classList.remove("hidden");
     renderQuestions();
@@ -69,17 +60,12 @@ function startQuiz() {
 function renderQuestions() {
     const container = document.getElementById("questions-container");
     container.innerHTML = "";
-
     questions.forEach((item, index) => {
         let html = `
         <div class="question-block" id="qblock-${index}">
             <div class="question-text">${index + 1}. ${item.q}</div>
             <div class="options">`;
-        
-        item.options.forEach((opt, i) => {
-            // value sifatida original indeksni emas, hozirgi aralashgan indeksni saqlaymiz
-            // Lekin tekshirishda original kerak bo'ladi.
-            // Oson yo'li: data attribute qo'shamiz
+        item.options.forEach(opt => {
             html += `
             <label class="option-label" onclick="selectOption(this, 'q${index}')" data-orig-index="${opt.originalIndex}">
                 <span class="option-circle"></span>
@@ -98,7 +84,6 @@ function selectOption(label, name) {
     label.querySelector("input").checked = true;
 }
 
-// Array aralashtirish (Fisher-Yates)
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -107,86 +92,65 @@ function shuffleArray(array) {
     return array;
 }
 
-// Timer
 function startTimer() {
-    // Vaqt formatini parse qilish (YYYY-MM-DD HH:MM)
-    // Oddiy taqqoslash uchun JS Date ga o'tkazamiz
-    // Eslatma: Server vaqti va Client vaqti farq qilishi mumkin.
-    // Idealda serverdan "qolgan vaqt" kelishi kerak. 
-    // Hozir soddalik uchun telefondagi vaqtga ishonamiz.
-    
+    const timerDisplay = document.createElement("div");
+    timerDisplay.style.cssText = "position:fixed; top:10px; right:10px; background:red; color:white; padding:5px 10px; border-radius:5px; font-weight:bold; z-index:1000";
+    timerDisplay.id = "timer-display";
+    document.body.appendChild(timerDisplay);
+
     timerInterval = setInterval(() => {
-        const now = new Date();
-        const end = new Date(endTimeStr.replace(" ", "T")); // ISO formatga yaqinlashtirish
+        remainingSeconds--;
         
-        const diff = end - now;
-        if (diff <= 0) {
+        if (remainingSeconds <= 0) {
             clearInterval(timerInterval);
-            alert("Vaqt tugadi! Natijalar yuborilmoqda.");
-            finishTest(true); // Majburiy tugatish
+            timerDisplay.innerText = "00:00";
+            alert("Vaqt tugadi!");
+            finishTest();
         } else {
-            // Ekranda vaqtni ko'rsatish (ixtiyoriy)
+            let m = Math.floor(remainingSeconds / 60);
+            let s = remainingSeconds % 60;
+            timerDisplay.innerText = `${m}:${s < 10 ? '0'+s : s}`;
         }
     }, 1000);
 }
 
-function finishTest(force = false) {
+function finishTest() {
     clearInterval(timerInterval);
+    document.getElementById("timer-display")?.remove();
     let score = 0;
-    let detailsHTML = "";
-
+    
     questions.forEach((item, index) => {
         const selectedLabel = document.querySelector(`input[name="q${index}"]:checked`)?.parentElement;
         const qBlock = document.getElementById(`qblock-${index}`);
         
-        let isCorrect = false;
-        
-        // To'g'ri javobni topamiz (Vizual ko'rsatish uchun)
         const allLabels = qBlock.querySelectorAll(".option-label");
-        let correctLabel;
         allLabels.forEach(lbl => {
             if (parseInt(lbl.dataset.origIndex) === item.correctIndex) {
-                correctLabel = lbl;
+                lbl.classList.add("correct-answer-show");
             }
+            lbl.style.pointerEvents = "none";
         });
 
         if (selectedLabel) {
-            const selectedOrigIndex = parseInt(selectedLabel.dataset.origIndex);
-            if (selectedOrigIndex === item.correctIndex) {
+            if (parseInt(selectedLabel.dataset.origIndex) === item.correctIndex) {
                 score++;
-                isCorrect = true;
-                selectedLabel.style.background = "#d4edda"; // Yashil
+                selectedLabel.style.background = "#d4edda";
                 selectedLabel.style.borderColor = "#28a745";
             } else {
-                selectedLabel.style.background = "#f8d7da"; // Qizil
+                selectedLabel.style.background = "#f8d7da";
                 selectedLabel.style.borderColor = "#dc3545";
             }
         }
-        
-        // Har doim to'g'ri javobni ko'rsatib qo'yamiz (Yakunlanganda)
-        if (correctLabel) {
-            correctLabel.classList.add("correct-answer-show"); // CSS da yashil border beramiz
-        }
-        
-        // Inputlarni o'chirib qo'yamiz
-        allLabels.forEach(l => l.style.pointerEvents = "none");
     });
 
-    // Tugmani yashiramiz
     document.querySelector(".finish-btn").style.display = "none";
-    
-    // Tepaga natijani chiqaramiz
     const header = document.querySelector(".quiz-header");
     header.innerHTML = `<h3>Natija: ${score} / ${questions.length}</h3>`;
-    header.style.color = score > questions.length/2 ? "green" : "red";
-
-    // Scroll to top
     window.scrollTo(0,0);
 
-    // Botga yuborish
     const data = {
         test_code: testCode,
-        student_name: document.getElementById("student_name").value,
+        student_name: document.getElementById("student_name").value || "Noma'lum",
         score: score,
         total: questions.length
     };
