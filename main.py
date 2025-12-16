@@ -24,29 +24,55 @@ dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 db_pool = None
 
-# --- HEMIS PARSER (O'zgarmadi) ---
+# --- HEMIS FORMATINI PARSING QILISH (YANGILANGAN) ---
 def parse_hemis_format(text):
     questions = []
+    
+    # 1. Tozalash: Windows formatdagi qator tashlashni to'g'irlash
+    text = text.replace('\r\n', '\n').strip()
+    
+    # 2. Bloklarga bo'lish
     blocks = text.split('+++++')
+    
     for block in blocks:
         block = block.strip()
         if not block: continue
+        
+        # 3. Savol va javoblarni ajratish
+        # Ba'zan ==== belgisi yangi qatorda bo'lmasligi mumkin, shuning uchun \n ni inobatga olamiz
         parts = block.split('====')
-        if len(parts) < 2: continue
+        
+        # Agar ==== belgisi topilmasa yoki yetarli bo'lmasa
+        if len(parts) < 2: 
+            continue 
+        
         q_text = parts[0].strip()
         answers = []
         correct_index = -1
-        answer_parts = parts[1:]
+        
+        # Javoblarni yig'ish
         valid_answers = []
-        for i, ans in enumerate(answer_parts):
+        answer_parts = parts[1:]
+        
+        for ans in answer_parts:
             ans = ans.strip()
             if not ans: continue
+            
+            # To'g'ri javobni aniqlash
             if ans.startswith('#'):
                 correct_index = len(valid_answers)
                 ans = ans[1:].strip()
+            
             valid_answers.append(ans)
+            
+        # Agar savol matni bor bo'lsa va javoblar bo'lsa va to'g'ri javob belgilangan bo'lsa
         if q_text and valid_answers and correct_index != -1:
-            questions.append({"q": q_text, "a": valid_answers, "c": correct_index})
+            questions.append({
+                "q": q_text,
+                "a": valid_answers,
+                "c": correct_index
+            })
+            
     return json.dumps(questions)
 
 # --- BAZA (O'zgarmadi) ---
