@@ -2,4 +2,3 @@ aiogram
 aiohttp
 aiohttp_cors
 asyncpg
-pytz
