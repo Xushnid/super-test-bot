@@ -14,7 +14,6 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiohttp import web
 import aiohttp_cors
 
-# SOZLAMALAR
 TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 WEB_APP_URL = "https://xushnid.github.io/super-test-bot/" 
@@ -24,63 +23,39 @@ dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 db_pool = None
 
-# --- HEMIS FORMATINI PARSING QILISH (YANGILANGAN) ---
+# --- HEMIS PARSER ---
 def parse_hemis_format(text):
     questions = []
-    
-    # 1. Tozalash: Windows formatdagi qator tashlashni to'g'irlash
-    text = text.replace('\r\n', '\n').strip()
-    
-    # 2. Bloklarga bo'lish
-    blocks = text.split('+++++')
-    
+    blocks = text.replace('\r\n', '\n').split('+++++')
     for block in blocks:
         block = block.strip()
         if not block: continue
-        
-        # 3. Savol va javoblarni ajratish
-        # Ba'zan ==== belgisi yangi qatorda bo'lmasligi mumkin, shuning uchun \n ni inobatga olamiz
         parts = block.split('====')
-        
-        # Agar ==== belgisi topilmasa yoki yetarli bo'lmasa
-        if len(parts) < 2: 
-            continue 
-        
+        if len(parts) < 2: continue
         q_text = parts[0].strip()
         answers = []
         correct_index = -1
-        
-        # Javoblarni yig'ish
-        valid_answers = []
         answer_parts = parts[1:]
-        
+        valid_answers = []
         for ans in answer_parts:
             ans = ans.strip()
             if not ans: continue
-            
-            # To'g'ri javobni aniqlash
             if ans.startswith('#'):
                 correct_index = len(valid_answers)
                 ans = ans[1:].strip()
-            
             valid_answers.append(ans)
-            
-        # Agar savol matni bor bo'lsa va javoblar bo'lsa va to'g'ri javob belgilangan bo'lsa
         if q_text and valid_answers and correct_index != -1:
-            questions.append({
-                "q": q_text,
-                "a": valid_answers,
-                "c": correct_index
-            })
-            
+            questions.append({"q": q_text, "a": valid_answers, "c": correct_index})
     return json.dumps(questions)
 
-# --- BAZA (O'zgarmadi) ---
+# --- BAZA ---
 async def create_db_pool():
     global db_pool
     db_pool = await asyncpg.create_pool(DATABASE_URL, ssl='require')
     async with db_pool.acquire() as conn:
         await conn.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY)")
+        
+        # Tests jadvali (Yangilangan: session_version va last_stats_msg_id qo'shildi)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS tests (
                 id SERIAL PRIMARY KEY,
@@ -89,9 +64,13 @@ async def create_db_pool():
                 unique_code TEXT UNIQUE,
                 questions TEXT,
                 is_active INTEGER DEFAULT 0,
-                end_time TIMESTAMP
+                end_time TIMESTAMP,
+                session_version INTEGER DEFAULT 1,
+                last_stats_msg_id INTEGER DEFAULT 0
             )
         """)
+        
+        # Results jadvali (Yangilangan: session_version)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS results (
                 id SERIAL PRIMARY KEY,
@@ -100,10 +79,10 @@ async def create_db_pool():
                 score INTEGER,
                 total INTEGER,
                 full_name TEXT,
-                UNIQUE(test_code, user_id) 
+                session_version INTEGER DEFAULT 1,
+                UNIQUE(test_code, user_id)
             )
-        """) 
-        # UNIQUE(test_code, user_id) - Bir odam bir testni 2 marta topshira olmasligi uchun
+        """)
 
 async def close_db_pool():
     if db_pool: await db_pool.close()
@@ -115,35 +94,7 @@ class BotStates(StatesGroup):
     waiting_for_code = State()
     waiting_for_minutes = State()
 
-def generate_code():
-    return ''.join(random.choices(string.digits, k=5))
-
-# --- YORDAMCHI FUNKSIYALAR ---
-async def show_test_menu(message, test_id):
-    async with db_pool.acquire() as conn:
-        test = await conn.fetchrow("SELECT * FROM tests WHERE id = $1", test_id)
-    if not test: return
-    status = "🟢 Aktiv" if test['is_active'] else "🔴 Deaktiv"
-    time_info = ""
-    if test['is_active'] and test['end_time']:
-        now = datetime.utcnow()
-        remaining = test['end_time'] - now
-        if remaining.total_seconds() > 0:
-            mins = int(remaining.total_seconds() / 60)
-            time_info = f"\n⏳ Qoldi: {mins} daqiqa"
-        else:
-            time_info = "\n⌛️ Vaqt tugagan"
-
-    text = (f"🆔 Kod: <b>{test['unique_code']}</b>\n📝 Nom: {test['name']}\n📊 Holat: {status}{time_info}")
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🟢 Aktivlash" if not test['is_active'] else "🔴 To'xtatish", callback_data=f"toggle_{test_id}")],
-        [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_{test_id}")],
-        [InlineKeyboardButton(text="🔙 Testlarim", callback_data="my_tests")]
-    ])
-    if isinstance(message, types.CallbackQuery):
-        await message.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    else:
-        await message.answer(text, reply_markup=kb, parse_mode="HTML")
+def generate_code(): return ''.join(random.choices(string.digits, k=5))
 
 # --- HANDLERLAR ---
 @dp.message(Command("start"))
@@ -156,15 +107,16 @@ async def cmd_start(message: types.Message):
     ], resize_keyboard=True)
     await message.answer(f"Salom {message.from_user.full_name}!", reply_markup=kb)
 
+# --- TEST YARATISH ---
 @dp.message(F.text == "➕ Test Yaratish")
 async def create_test_start(message: types.Message, state: FSMContext):
-    await message.answer("📝 Test nomini yozing:")
+    await message.answer("📝 Test nomi:")
     await state.set_state(BotStates.waiting_for_name)
 
 @dp.message(BotStates.waiting_for_name)
 async def create_test_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
-    await message.answer("📂 HEMIS formatdagi faylni yuklang.", parse_mode="HTML")
+    await message.answer("📂 HEMIS faylni yuklang.")
     await state.set_state(BotStates.waiting_for_file)
 
 @dp.message(BotStates.waiting_for_file, F.document)
@@ -172,79 +124,89 @@ async def create_test_file(message: types.Message, state: FSMContext):
     data = await state.get_data()
     file = await bot.get_file(message.document.file_id)
     content = (await bot.download_file(file.file_path)).read().decode('utf-8')
-    try:
-        json.loads(content)
-        final_content = content
-    except:
-        final_content = parse_hemis_format(content)
-        if final_content == "[]":
-            await message.answer("❌ Savollar topilmadi.")
-            return
+    final_content = parse_hemis_format(content)
+    
+    if final_content == "[]":
+        await message.answer("❌ Savollar topilmadi.")
+        return
 
     unique_code = generate_code()
     async with db_pool.acquire() as conn:
         await conn.execute("INSERT INTO tests (owner_id, name, unique_code, questions, is_active) VALUES ($1, $2, $3, $4, 0)", 
                            message.from_user.id, data['name'], unique_code, final_content)
-    await message.answer(f"✅ Test yuklandi! Kod: <b>{unique_code}</b>", parse_mode="HTML")
+    await message.answer(f"✅ Kod: <b>{unique_code}</b>", parse_mode="HTML")
     await state.clear()
 
+# --- MENING TESTLARIM ---
 @dp.message(F.text == "📂 Mening Testlarim")
 async def my_tests_list(message: types.Message):
     async with db_pool.acquire() as conn:
         tests = await conn.fetch("SELECT id, name, unique_code, is_active FROM tests WHERE owner_id = $1 ORDER BY id DESC", message.from_user.id)
-    if not tests:
-        await message.answer("Testlar yo'q.")
-        return
+    if not tests: return await message.answer("Testlar yo'q.")
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"{'🟢' if t['is_active'] else '🔴'} {t['unique_code']} - {t['name']}", callback_data=f"view_{t['id']}")] for t in tests
     ])
-    await message.answer("Sizning testlaringiz:", reply_markup=kb)
-
-@dp.callback_query(F.data == "my_tests")
-async def back_to_my_tests(call: types.CallbackQuery):
-    await call.message.delete(); await my_tests_list(call.message)
+    await message.answer("Testlaringiz:", reply_markup=kb)
 
 @dp.callback_query(F.data.startswith("view_"))
 async def view_test_details(call: types.CallbackQuery):
-    await show_test_menu(call, int(call.data.split("_")[1]))
+    test_id = int(call.data.split("_")[1])
+    async with db_pool.acquire() as conn:
+        test = await conn.fetchrow("SELECT * FROM tests WHERE id = $1", test_id)
+    if not test: return
+    
+    status = "🟢 Aktiv" if test['is_active'] else "🔴 Deaktiv"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Aktivlash" if not test['is_active'] else "🔴 To'xtatish", callback_data=f"toggle_{test_id}")],
+        [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_{test_id}")],
+        [InlineKeyboardButton(text="📊 Natijalar", callback_data=f"stats_{test_id}")]
+    ])
+    await call.message.edit_text(f"🆔 Kod: <b>{test['unique_code']}</b>\n📝 Nom: {test['name']}\n📊 Holat: {status}", reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("del_"))
 async def delete_test(call: types.CallbackQuery):
     async with db_pool.acquire() as conn:
         await conn.execute("DELETE FROM tests WHERE id = $1", int(call.data.split("_")[1]))
-    await call.answer("O'chirildi."); await back_to_my_tests(call)
+    await call.answer("O'chirildi.")
+    await call.message.delete()
 
+# --- AKTIVLASHTIRISH VA QAYTA TOPSHIRISH MANTIQI ---
 @dp.callback_query(F.data.startswith("toggle_"))
 async def toggle_test_status(call: types.CallbackQuery, state: FSMContext):
     test_id = int(call.data.split("_")[1])
     async with db_pool.acquire() as conn:
-        test = await conn.fetchrow("SELECT is_active FROM tests WHERE id = $1", test_id)
+        test = await conn.fetchrow("SELECT is_active, session_version FROM tests WHERE id = $1", test_id)
         if test['is_active']:
             await conn.execute("UPDATE tests SET is_active = 0, end_time = NULL WHERE id = $1", test_id)
-            await call.answer("To'xtatildi"); await show_test_menu(call, test_id)
+            await call.answer("To'xtatildi")
+            await view_test_details(call)
         else:
+            # Yangi sessiya uchun versiyani oshiramiz
+            new_version = test['session_version'] + 1
+            await conn.execute("UPDATE tests SET session_version = $1 WHERE id = $2", new_version, test_id)
+            
             await state.update_data(test_id=test_id)
-            await call.message.answer("⏱ Necha daqiqa ochiq tursin?")
+            await call.message.answer("⏱ Necha daqiqa?")
             await state.set_state(BotStates.waiting_for_minutes)
 
 @dp.message(BotStates.waiting_for_minutes)
 async def set_active_minutes(message: types.Message, state: FSMContext):
     try:
         minutes = int(message.text)
-        if minutes <= 0: raise ValueError
         data = await state.get_data()
         end_time = datetime.utcnow() + timedelta(minutes=minutes)
         async with db_pool.acquire() as conn:
-            await conn.execute("UPDATE tests SET is_active = 1, end_time = $1 WHERE id = $2", end_time, data['test_id'])
+            # Yangi message ID uchun 0 qilib ketamiz
+            await conn.execute("UPDATE tests SET is_active = 1, end_time = $1, last_stats_msg_id = 0 WHERE id = $2", end_time, data['test_id'])
         await message.answer(f"✅ {minutes} daqiqaga yoqildi!")
         await state.clear()
     except:
         await message.answer("Raqam kiriting.")
 
-# --- TEST YECHISH (Login Logic Update) ---
+# --- TEST YECHISH ---
 @dp.message(F.text == "✍️ Test Yechish")
 async def solve_test_ask_code(message: types.Message, state: FSMContext):
-    await message.answer("🔑 Test kodini kiriting:")
+    await message.answer("🔑 Test kodi:")
     await state.set_state(BotStates.waiting_for_code)
 
 @dp.message(BotStates.waiting_for_code)
@@ -254,50 +216,74 @@ async def check_test_code(message: types.Message, state: FSMContext):
     
     async with db_pool.acquire() as conn:
         test = await conn.fetchrow("SELECT * FROM tests WHERE unique_code = $1", code)
-        # Oldin topshirganligini tekshirish
-        result = await conn.fetchrow("SELECT id FROM results WHERE test_code = $1 AND user_id = $2", code, user_id)
+        result = await conn.fetchrow("SELECT session_version FROM results WHERE test_code = $1 AND user_id = $2", code, user_id)
 
-    if not test:
-        await message.answer("❌ Test topilmadi.")
-        return
-    if result:
-        await message.answer("✅ Siz bu testni allaqachon topshirgansiz!")
-        return
-    if not test['is_active']:
-        await message.answer("🚫 Test o'chirilgan.")
-        return
+    if not test: return await message.answer("❌ Test topilmadi.")
+    if not test['is_active']: return await message.answer("🚫 Test o'chirilgan.")
+    
+    # Qayta topshirish tekshiruvi: Agar userning result versiyasi test versiyasidan kichik bo'lsa, yecha oladi
+    if result and result['session_version'] >= test['session_version']:
+        return await message.answer("✅ Bu sessiyada topshirib bo'lgansiz.")
+        
     if test['end_time'] and datetime.utcnow() > test['end_time']:
-        await message.answer("⌛️ Vaqt tugagan.")
-        return
+        return await message.answer("⌛️ Vaqt tugagan.")
 
-    # User ID ni URL ga qo'shib beramiz
     app_link = f"{WEB_APP_URL}?code={code}&userId={user_id}"
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🚀 Boshlash: {test['name']}", web_app=WebAppInfo(url=app_link))]
-    ])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🚀 Boshlash", web_app=WebAppInfo(url=app_link))]])
     await message.answer("Testga kirish:", reply_markup=kb)
     await state.clear()
 
+# --- WEBAPP DATA VA NATIJALARNI TAHRIRLASH ---
 @dp.message(F.web_app_data)
 async def handle_webapp_data(message: types.Message):
     data = json.loads(message.web_app_data.data)
-    # Bazaga yozamiz
+    user_id = message.from_user.id
+    
     async with db_pool.acquire() as conn:
-        test = await conn.fetchrow("SELECT owner_id, name FROM tests WHERE unique_code = $1", data['test_code'])
-        # ON CONFLICT DO NOTHING - agar qayta yuborsa xato bermasligi uchun
+        test = await conn.fetchrow("SELECT owner_id, name, session_version, last_stats_msg_id, id FROM tests WHERE unique_code = $1", data['test_code'])
+        
+        # Natijani saqlash (UPDATE yoki INSERT)
         await conn.execute("""
-            INSERT INTO results (test_code, user_id, score, total, full_name) 
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (test_code, user_id) DO NOTHING
-        """, data['test_code'], message.from_user.id, data['score'], data['total'], data['student_name'])
+            INSERT INTO results (test_code, user_id, score, total, full_name, session_version) 
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (test_code, user_id) 
+            DO UPDATE SET score = $3, total = $4, full_name = $5, session_version = $6
+        """, data['test_code'], user_id, data['score'], data['total'], data['student_name'], test['session_version'])
 
-    await message.answer(f"✅ Natija qabul qilindi: {data['score']}/{data['total']}")
-    if test:
+        # Talabaga javob
+        await message.answer(f"✅ Natija saqlandi: {data['score']}/{data['total']}")
+
+        # TEST EGASIGA XABAR (EDIT QILISH)
+        # 1. Barcha natijalarni olamiz
+        all_results = await conn.fetch("""
+            SELECT full_name, score, total FROM results 
+            WHERE test_code = $1 AND session_version = $2 
+            ORDER BY score DESC
+        """, data['test_code'], test['session_version'])
+        
+        # 2. Chiroyli ro'yxat tuzamiz
+        stats_text = f"📊 <b>Natijalar: {test['name']}</b>\n\n"
+        for i, res in enumerate(all_results, 1):
+            stats_text += f"{i}. {res['full_name']} — <b>{res['score']}/{res['total']}</b>\n"
+        
+        # 3. Eski xabarni tahrirlashga urinamiz
+        msg_id = test['last_stats_msg_id']
+        sent_msg = None
+        
         try:
-            await bot.send_message(test['owner_id'], f"🔔 <b>Yechim:</b> {test['name']}\n👤 {data['student_name']}\n📊 {data['score']}/{data['total']}", parse_mode="HTML")
-        except: pass
+            if msg_id > 0:
+                await bot.edit_message_text(chat_id=test['owner_id'], message_id=msg_id, text=stats_text, parse_mode="HTML")
+            else:
+                raise Exception("No message")
+        except:
+            # Agar tahrirlab bo'lmasa (o'chirilgan bo'lsa), yangi yuboramiz
+            try:
+                sent_msg = await bot.send_message(chat_id=test['owner_id'], text=stats_text, parse_mode="HTML")
+                # Yangi ID ni saqlab qo'yamiz
+                await conn.execute("UPDATE tests SET last_stats_msg_id = $1 WHERE id = $2", sent_msg.message_id, test['id'])
+            except: pass
 
-# --- SERVER API (Update) ---
+# --- SERVER API ---
 routes = web.RouteTableDef()
 @routes.get('/')
 async def home(request): return web.Response(text="Running")
@@ -305,32 +291,29 @@ async def home(request): return web.Response(text="Running")
 @routes.get('/api/get_test')
 async def api_get_test(request):
     code = request.query.get('code')
-    user_id = request.query.get('userId') # URL dan user_id ni olamiz
-    
+    user_id = request.query.get('userId')
     if not code or not db_pool: return web.json_response({"error": "Error"}, status=400)
     
     async with db_pool.acquire() as conn:
-        # User oldin topshirganmi?
+        test = await conn.fetchrow("SELECT questions, name, end_time, session_version FROM tests WHERE unique_code = $1", code)
+        if not test: return web.json_response({"error": "not_found"}, status=404)
+        
+        # Qayta topshirish tekshiruvi (API darajasida)
         if user_id:
-            res = await conn.fetchrow("SELECT id FROM results WHERE test_code = $1 AND user_id = $2", code, int(user_id))
-            if res:
-                return web.json_response({"error": "submitted"}) # Allaqachon topshirgan
+            res = await conn.fetchrow("SELECT session_version FROM results WHERE test_code = $1 AND user_id = $2", code, int(user_id))
+            if res and res['session_version'] >= test['session_version']:
+                 return web.json_response({"error": "submitted"})
 
-        row = await conn.fetchrow("SELECT questions, name, end_time FROM tests WHERE unique_code = $1", code)
-    
-    if row:
         rem_sec = 0
-        if row['end_time']:
-            delta = row['end_time'] - datetime.utcnow()
-            rem_sec = int(delta.total_seconds())
+        if test['end_time']:
+            rem_sec = int((test['end_time'] - datetime.utcnow()).total_seconds())
         if rem_sec <= 0: return web.json_response({"error": "expired"})
         
         return web.json_response({
-            "name": row['name'], 
-            "questions": json.loads(row['questions']),
+            "name": test['name'], 
+            "questions": json.loads(test['questions']),
             "remaining_seconds": rem_sec 
         })
-    return web.json_response({"error": "not_found"}, status=404)
 
 async def start_server():
     app = web.Application()
