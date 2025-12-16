@@ -1,87 +1,90 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// DIQQAT: Render.com dagi saytingiz manzilini shu yerga qo'ying!
-// Oxirida / belgisini olib tashlang.
+// Render Serveringiz manzili (oxirida / bo'lmasin)
 const API_URL = "https://super-test-bot.onrender.com"; 
 
-let currentQuestions = [];
-let currentTestName = "";
+let questions = [];
+let testCode = "";
+let endTimeStr = "";
+let timerInterval;
 
-// 1. Sahifa ochilganda testlarni yuklaymiz
+// URL dan kodni olish (?code=12345)
+const urlParams = new URLSearchParams(window.location.search);
+testCode = urlParams.get('code');
+
+// Boshlanishda
 document.addEventListener("DOMContentLoaded", () => {
-    fetch(`${API_URL}/api/tests`)
-        .then(res => res.json())
-        .then(tests => {
-            document.getElementById("loader").classList.add("hidden");
-            const container = document.getElementById("tests-container");
-            const listScreen = document.getElementById("test-list-screen");
-            
-            if(tests.length === 0) {
-                container.innerHTML = "<p>Hozircha aktiv testlar yo'q.</p>";
-            } else {
-                tests.forEach(test => {
-                    const btn = document.createElement("button");
-                    btn.className = "primary-btn";
-                    btn.style.marginBottom = "10px";
-                    btn.innerText = test.name;
-                    btn.onclick = () => selectTest(test.id);
-                    container.appendChild(btn);
-                });
-            }
-            listScreen.classList.remove("hidden");
-        })
-        .catch(err => {
-            document.getElementById("loader").innerHTML = "<p>Xatolik: Serverga ulanib bo'lmadi.</p>";
-        });
+    if (!testCode) {
+        document.body.innerHTML = "<h3 style='text-align:center; margin-top:50px;'>Xatolik: Test kodi yo'q</h3>";
+        return;
+    }
+    loadTest();
 });
 
-// 2. Test tanlanganda savollarni yuklaymiz
-function selectTest(id) {
-    document.getElementById("test-list-screen").classList.add("hidden");
-    document.getElementById("loader").classList.remove("hidden");
-    
-    fetch(`${API_URL}/api/test/${id}`)
+function loadTest() {
+    fetch(`${API_URL}/api/get_test?code=${testCode}`)
         .then(res => res.json())
         .then(data => {
-            currentQuestions = data.questions;
-            currentTestName = data.name;
+            if (data.error) {
+                alert("Test topilmadi!");
+                tg.close();
+                return;
+            }
             
-            document.getElementById("loader").classList.add("hidden");
-            document.getElementById("selected-test-name").innerText = data.name;
+            document.getElementById("test-title").innerText = data.name;
+            endTimeStr = data.end_time;
+            
+            // Savollarni aralashtirish
+            questions = shuffleArray(data.questions).map(q => {
+                // Javoblarni ham aralashtirish, lekin to'g'ri javob indeksini yo'qotmaslik kerak
+                // Buning uchun javob obyektini o'zgartiramiz: {text: "Javob", originalIndex: 0}
+                let optionsObj = q.a.map((opt, i) => ({ text: opt, originalIndex: i }));
+                let shuffledOptions = shuffleArray(optionsObj);
+                
+                return {
+                    q: q.q,
+                    options: shuffledOptions,
+                    correctIndex: q.c // Bu original indeks
+                };
+            });
+
             document.getElementById("login-screen").classList.remove("hidden");
+            startTimer();
+        })
+        .catch(err => {
+            alert("Server xatosi: " + err);
         });
 }
 
-// 3. Testni boshlash (Login dan o'tish)
 function startQuiz() {
     const name = document.getElementById("student_name").value;
-    if(!name) { tg.showAlert("Ismingizni kiriting!"); return; }
+    if (!name) { tg.showAlert("Ismingizni kiriting!"); return; }
 
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("quiz-screen").classList.remove("hidden");
-    
     renderQuestions();
 }
 
-// 4. Savollarni chizish
 function renderQuestions() {
     const container = document.getElementById("questions-container");
     container.innerHTML = "";
-    document.getElementById("q-count").innerText = `${currentQuestions.length} ta`;
 
-    currentQuestions.forEach((item, index) => {
+    questions.forEach((item, index) => {
         let html = `
-        <div class="question-block">
+        <div class="question-block" id="qblock-${index}">
             <div class="question-text">${index + 1}. ${item.q}</div>
             <div class="options">`;
         
-        item.a.forEach((opt, i) => {
+        item.options.forEach((opt, i) => {
+            // value sifatida original indeksni emas, hozirgi aralashgan indeksni saqlaymiz
+            // Lekin tekshirishda original kerak bo'ladi.
+            // Oson yo'li: data attribute qo'shamiz
             html += `
-            <label class="option-label" onclick="selectOption(this, 'q${index}')">
+            <label class="option-label" onclick="selectOption(this, 'q${index}')" data-orig-index="${opt.originalIndex}">
                 <span class="option-circle"></span>
-                <input type="radio" name="q${index}" value="${i}">
-                <span>${opt}</span>
+                <input type="radio" name="q${index}" value="${opt.originalIndex}">
+                <span>${opt.text}</span>
             </label>`;
         });
         html += `</div></div>`;
@@ -95,20 +98,97 @@ function selectOption(label, name) {
     label.querySelector("input").checked = true;
 }
 
-// 5. Yakunlash
-function finishTest() {
+// Array aralashtirish (Fisher-Yates)
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+// Timer
+function startTimer() {
+    // Vaqt formatini parse qilish (YYYY-MM-DD HH:MM)
+    // Oddiy taqqoslash uchun JS Date ga o'tkazamiz
+    // Eslatma: Server vaqti va Client vaqti farq qilishi mumkin.
+    // Idealda serverdan "qolgan vaqt" kelishi kerak. 
+    // Hozir soddalik uchun telefondagi vaqtga ishonamiz.
+    
+    timerInterval = setInterval(() => {
+        const now = new Date();
+        const end = new Date(endTimeStr.replace(" ", "T")); // ISO formatga yaqinlashtirish
+        
+        const diff = end - now;
+        if (diff <= 0) {
+            clearInterval(timerInterval);
+            alert("Vaqt tugadi! Natijalar yuborilmoqda.");
+            finishTest(true); // Majburiy tugatish
+        } else {
+            // Ekranda vaqtni ko'rsatish (ixtiyoriy)
+        }
+    }, 1000);
+}
+
+function finishTest(force = false) {
+    clearInterval(timerInterval);
     let score = 0;
-    currentQuestions.forEach((item, index) => {
-        const checked = document.querySelector(`input[name="q${index}"]:checked`);
-        if (checked && parseInt(checked.value) === item.c) score++;
+    let detailsHTML = "";
+
+    questions.forEach((item, index) => {
+        const selectedLabel = document.querySelector(`input[name="q${index}"]:checked`)?.parentElement;
+        const qBlock = document.getElementById(`qblock-${index}`);
+        
+        let isCorrect = false;
+        
+        // To'g'ri javobni topamiz (Vizual ko'rsatish uchun)
+        const allLabels = qBlock.querySelectorAll(".option-label");
+        let correctLabel;
+        allLabels.forEach(lbl => {
+            if (parseInt(lbl.dataset.origIndex) === item.correctIndex) {
+                correctLabel = lbl;
+            }
+        });
+
+        if (selectedLabel) {
+            const selectedOrigIndex = parseInt(selectedLabel.dataset.origIndex);
+            if (selectedOrigIndex === item.correctIndex) {
+                score++;
+                isCorrect = true;
+                selectedLabel.style.background = "#d4edda"; // Yashil
+                selectedLabel.style.borderColor = "#28a745";
+            } else {
+                selectedLabel.style.background = "#f8d7da"; // Qizil
+                selectedLabel.style.borderColor = "#dc3545";
+            }
+        }
+        
+        // Har doim to'g'ri javobni ko'rsatib qo'yamiz (Yakunlanganda)
+        if (correctLabel) {
+            correctLabel.classList.add("correct-answer-show"); // CSS da yashil border beramiz
+        }
+        
+        // Inputlarni o'chirib qo'yamiz
+        allLabels.forEach(l => l.style.pointerEvents = "none");
     });
 
+    // Tugmani yashiramiz
+    document.querySelector(".finish-btn").style.display = "none";
+    
+    // Tepaga natijani chiqaramiz
+    const header = document.querySelector(".quiz-header");
+    header.innerHTML = `<h3>Natija: ${score} / ${questions.length}</h3>`;
+    header.style.color = score > questions.length/2 ? "green" : "red";
+
+    // Scroll to top
+    window.scrollTo(0,0);
+
+    // Botga yuborish
     const data = {
-        test_name: currentTestName,
+        test_code: testCode,
         student_name: document.getElementById("student_name").value,
         score: score,
-        total: currentQuestions.length
+        total: questions.length
     };
-    
     tg.sendData(JSON.stringify(data));
 }
