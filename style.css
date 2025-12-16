@@ -11,7 +11,9 @@ body {
     background: var(--bg-color);
     color: var(--text-color);
     margin: 0; padding: 15px;
-    -webkit-tap-highlight-color: transparent;
+   -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10 and IE 11 */
+    user-select: none; /* Standard syntax */
 }
 
 .container { max-width: 600px; margin: 0 auto; }
@@ -30,6 +32,8 @@ input {
     border-radius: 8px;
     font-size: 16px;
     box-sizing: border-box; /* Mobil uchun muhim */
+     -webkit-user-select: text;
+    user-select: text;
 }
 
 .primary-btn {
