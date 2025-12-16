@@ -97,13 +97,35 @@ def generate_code(): return ''.join(random.choices(string.digits, k=5))
 # --- BOT HANDLERLARI ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    # Foydalanuvchini bazaga qo'shish
     async with db_pool.acquire() as conn:
         await conn.execute("INSERT INTO users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", message.from_user.id)
+    
+    # Tugmalar
     kb = ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="✍️ Test Yechish"), KeyboardButton(text="➕ Test Yaratish")],
         [KeyboardButton(text="📂 Mening Testlarim")]
     ], resize_keyboard=True)
-    await message.answer(f"Salom {message.from_user.full_name}!", reply_markup=kb)
+    
+    # Instruksiya Matni
+    welcome_text = (
+        f"👋 <b>Assalomu alaykum, {message.from_user.full_name}!</b>\n\n"
+        f"🤖 Bu bot orqali siz professional testlar tashkil qilishingiz yoki bilimingizni sinashingiz mumkin.\n\n"
+        f"ℹ️ <b>QISQA YO'RIQNOMA:</b>\n\n"
+        f"👨‍🏫 <b>O'qituvchilar uchun (Test tuzish):</b>\n"
+        f"1. <b>«➕ Test Yaratish»</b> tugmasini bosing va nom bering.\n"
+        f"2. Test faylini (<i>HEMIS formatda .txt</i>) yuklang.\n"
+        f"3. <b>«📂 Mening Testlarim»</b> bo'limiga o'tib, testni 🟢 <b>Aktivlashtiring</b> (vaqt va savollar sonini belgilang).\n"
+        f"4. Hosil bo'lgan <b>5 xonali kodni</b> talabalarga tarqating.\n\n"
+        f"👨‍🎓 <b>Talabalar uchun (Test yechish):</b>\n"
+        f"1. <b>«✍️ Test Yechish»</b> tugmasini bosing.\n"
+        f"2. Kodni kiriting va testni boshlang.\n\n"
+        f"🚀 <i>Boshlash uchun quyidagi tugmalardan birini tanlang:</i>"
+    )
+    
+    await message.answer(welcome_text, reply_markup=kb, parse_mode="HTML")
+
+
 
 @dp.message(F.text == "➕ Test Yaratish")
 async def create_test_start(message: types.Message, state: FSMContext):
