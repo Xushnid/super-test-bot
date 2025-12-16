@@ -6,17 +6,18 @@ import random
 import string
 from datetime import datetime, timedelta
 import asyncpg
+import pandas as pd  # Excel uchun
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiohttp import web
 import aiohttp_cors
 
 TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
-WEB_APP_URL = "https://xushnid.github.io/super-test-bot/" 
+WEB_APP_URL = "https://xushnid.github.io/super-test-bot/" # <-- O'ZINGIZNIKINI QO'YING
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -54,6 +55,8 @@ async def create_db_pool():
     db_pool = await asyncpg.create_pool(DATABASE_URL, ssl='require')
     async with db_pool.acquire() as conn:
         await conn.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY)")
+        
+        # Tests jadvali
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS tests (
                 id SERIAL PRIMARY KEY,
@@ -63,19 +66,22 @@ async def create_db_pool():
                 questions TEXT,
                 is_active INTEGER DEFAULT 0,
                 end_time TIMESTAMP,
-                session_version INTEGER DEFAULT 1,
-                last_stats_msg_id INTEGER DEFAULT 0
+                last_stats_msg_id INTEGER DEFAULT 0,
+                question_count INTEGER DEFAULT 0
             )
         """)
+        
+        # Results jadvali (Soddalashtirildi: session_version olib tashlandi, chunki endi tozalab tashlaymiz)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS results (
                 id SERIAL PRIMARY KEY,
                 test_code TEXT,
                 user_id BIGINT,
-                score INTEGER,
-                total INTEGER,
+                score INTEGER DEFAULT -1,
+                total INTEGER DEFAULT 0,
                 full_name TEXT,
-                session_version INTEGER DEFAULT 1,
+                student_msg_id INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
                 UNIQUE(test_code, user_id)
             )
         """)
@@ -89,10 +95,11 @@ class BotStates(StatesGroup):
     waiting_for_file = State()
     waiting_for_code = State()
     waiting_for_minutes = State()
+    waiting_for_count = State()
 
 def generate_code(): return ''.join(random.choices(string.digits, k=5))
 
-# --- BOT HANDLERLARI ---
+# --- HANDLERLAR ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     async with db_pool.acquire() as conn:
@@ -103,9 +110,7 @@ async def cmd_start(message: types.Message):
     ], resize_keyboard=True)
     await message.answer(f"Salom {message.from_user.full_name}!", reply_markup=kb)
 
-# ... (Test yaratish va Mening testlarim qismi o'zgarmadi, joy tejash uchun qisqartirib yozaman, siz eskisi kabi qoldiring) ...
-# Faqat eng muhim o'zgarishlar pastda API qismida
-
+# --- TEST YARATISH ---
 @dp.message(F.text == "➕ Test Yaratish")
 async def create_test_start(message: types.Message, state: FSMContext):
     await message.answer("📝 Test nomi:")
@@ -123,9 +128,11 @@ async def create_test_file(message: types.Message, state: FSMContext):
     file = await bot.get_file(message.document.file_id)
     content = (await bot.download_file(file.file_path)).read().decode('utf-8')
     final_content = parse_hemis_format(content)
+    
     if final_content == "[]":
         await message.answer("❌ Savollar topilmadi.")
         return
+
     unique_code = generate_code()
     async with db_pool.acquire() as conn:
         await conn.execute("INSERT INTO tests (owner_id, name, unique_code, questions, is_active) VALUES ($1, $2, $3, $4, 0)", 
@@ -133,6 +140,7 @@ async def create_test_file(message: types.Message, state: FSMContext):
     await message.answer(f"✅ Kod: <b>{unique_code}</b>", parse_mode="HTML")
     await state.clear()
 
+# --- MENING TESTLARIM ---
 @dp.message(F.text == "📂 Mening Testlarim")
 async def my_tests_list(message: types.Message):
     async with db_pool.acquire() as conn:
@@ -153,55 +161,142 @@ async def view_test_details(call: types.CallbackQuery):
     async with db_pool.acquire() as conn:
         test = await conn.fetchrow("SELECT * FROM tests WHERE id = $1", test_id)
     if not test: return
+    
     status = "🟢 Aktiv" if test['is_active'] else "🔴 Deaktiv"
+    q_len = len(json.loads(test['questions']))
+    count_info = f"{test['question_count']} ta (Random)" if test['question_count'] > 0 else f"{q_len} ta (Barchasi)"
+    
+    # Natijalar sonini bilish uchun
+    async with db_pool.acquire() as conn:
+        res_count = await conn.fetchval("SELECT COUNT(*) FROM results WHERE test_code = $1 AND score > -1", test['unique_code'])
+
+    text = (f"🆔 Kod: <b>{test['unique_code']}</b>\n"
+            f"📝 Nom: {test['name']}\n"
+            f"📊 Holat: {status}\n"
+            f"❓ Savollar: {count_info}\n"
+            f"👥 Yechganlar: {res_count} ta")
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🟢 Aktivlash" if not test['is_active'] else "🔴 To'xtatish", callback_data=f"toggle_{test_id}")],
+        [InlineKeyboardButton(text="🟢 Aktivlash (Yangi guruh)" if not test['is_active'] else "🔴 To'xtatish", callback_data=f"toggle_{test_id}")],
+        [InlineKeyboardButton(text="📥 Excel Natijalar", callback_data=f"excel_{test_id}")],
         [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_{test_id}")],
-        [InlineKeyboardButton(text="📊 Natijalar", callback_data=f"stats_{test_id}")]
+        [InlineKeyboardButton(text="🔙 Ortga", callback_data="my_tests")]
     ])
-    await call.message.edit_text(f"🆔 Kod: <b>{test['unique_code']}</b>\n📝 Nom: {test['name']}\n📊 Holat: {status}", reply_markup=kb, parse_mode="HTML")
+    try: await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except: await call.message.answer(text, reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("del_"))
 async def delete_test(call: types.CallbackQuery):
+    test_id = int(call.data.split("_")[1])
     async with db_pool.acquire() as conn:
-        await conn.execute("DELETE FROM tests WHERE id = $1", int(call.data.split("_")[1]))
-    await call.answer("O'chirildi."); await call.message.delete()
+        test = await conn.fetchrow("SELECT unique_code FROM tests WHERE id = $1", test_id)
+        if test:
+            await conn.execute("DELETE FROM results WHERE test_code = $1", test['unique_code'])
+            await conn.execute("DELETE FROM tests WHERE id = $1", test_id)
+    await call.answer("O'chirildi.")
+    await back_to_my_tests(call)
 
+# --- EXCEL EXPORT (YANGI) ---
+@dp.callback_query(F.data.startswith("excel_"))
+async def send_test_stats_excel(call: types.CallbackQuery):
+    test_id = int(call.data.split("_")[1])
+    await call.answer("Excel tayyorlanmoqda...")
+    
+    async with db_pool.acquire() as conn:
+        test = await conn.fetchrow("SELECT unique_code, name FROM tests WHERE id = $1", test_id)
+        # Faqat natijasi borlarni olamiz (score > -1)
+        results = await conn.fetch("""
+            SELECT full_name, score, total, created_at 
+            FROM results 
+            WHERE test_code = $1 AND score > -1 
+            ORDER BY score DESC
+        """, test['unique_code'])
+    
+    if not results:
+        await call.message.answer("❌ Bu testda hali natijalar yo'q.")
+        return
+
+    # Pandas yordamida Excel yaratish
+    data = []
+    for res in results:
+        # Vaqtni chiroyli qilish (GMT+5 ga moslash)
+        local_time = res['created_at'] + timedelta(hours=5)
+        data.append({
+            "F.I.SH": res['full_name'],
+            "To'g'ri": res['score'],
+            "Jami": res['total'],
+            "Foiz": f"{round((res['score']/res['total'])*100)}%",
+            "Vaqt": local_time.strftime("%Y-%m-%d %H:%M")
+        })
+
+    df = pd.DataFrame(data)
+    filename = f"Natijalar_{test['unique_code']}.xlsx"
+    df.to_excel(filename, index=False)
+
+    # Faylni yuborish
+    file = FSInputFile(filename)
+    await call.message.answer_document(file, caption=f"📊 <b>{test['name']}</b> natijalari.")
+    
+    # Serverdan o'chirish
+    os.remove(filename)
+
+# --- AKTIVLASHTIRISH LOGIKASI (RESET BILAN) ---
 @dp.callback_query(F.data.startswith("toggle_"))
 async def toggle_test_status(call: types.CallbackQuery, state: FSMContext):
     test_id = int(call.data.split("_")[1])
     async with db_pool.acquire() as conn:
-        test = await conn.fetchrow("SELECT is_active, session_version FROM tests WHERE id = $1", test_id)
+        test = await conn.fetchrow("SELECT is_active, unique_code, questions FROM tests WHERE id = $1", test_id)
+        
         if test['is_active']:
+            # TESTNI TO'XTATISH
             await conn.execute("UPDATE tests SET is_active = 0, end_time = NULL WHERE id = $1", test_id)
             await call.answer("To'xtatildi")
-            # Qaytadan view qilish (xato bermasligi uchun try except)
-            try: await view_test_details(call) 
-            except: pass
+            await view_test_details(call)
         else:
-            new_version = test['session_version'] + 1
-            await conn.execute("UPDATE tests SET session_version = $1 WHERE id = $2", new_version, test_id)
-            await state.update_data(test_id=test_id)
-            await call.message.answer("⏱ Necha daqiqa?")
+            # YANGI GURUH UCHUN TOZALASH (RESET)
+            # Diqqat: Bu eski natijalarni o'chirib yuboradi!
+            await conn.execute("DELETE FROM results WHERE test_code = $1", test['unique_code'])
+            
+            await state.update_data(test_id=test_id, total_q=len(json.loads(test['questions'])))
+            await call.message.answer("🗑 Eski natijalar tozalandi.\n\n⏱ Test necha daqiqa davom etsin?")
             await state.set_state(BotStates.waiting_for_minutes)
 
 @dp.message(BotStates.waiting_for_minutes)
 async def set_active_minutes(message: types.Message, state: FSMContext):
     try:
         minutes = int(message.text)
+        await state.update_data(minutes=minutes)
         data = await state.get_data()
-        end_time = datetime.utcnow() + timedelta(minutes=minutes)
+        await message.answer(f"❓ Bazada jami <b>{data['total_q']}</b> ta savol bor.\nShundan nechtasi random tushsin? (Masalan: 20)", parse_mode="HTML")
+        await state.set_state(BotStates.waiting_for_count)
+    except:
+        await message.answer("Raqam kiriting.")
+
+@dp.message(BotStates.waiting_for_count)
+async def set_active_count(message: types.Message, state: FSMContext):
+    try:
+        count = int(message.text)
+        data = await state.get_data()
+        if count > data['total_q']: return await message.answer(f"❌ Maksimal: {data['total_q']}")
+
+        end_time = datetime.utcnow() + timedelta(minutes=data['minutes'])
+        
         async with db_pool.acquire() as conn:
-            await conn.execute("UPDATE tests SET is_active = 1, end_time = $1, last_stats_msg_id = 0 WHERE id = $2", end_time, data['test_id'])
-        await message.answer(f"✅ {minutes} daqiqaga yoqildi!")
+            # Yangi message ID ochamiz (eski xabarni endi edit qilmaymiz)
+            await conn.execute("""
+                UPDATE tests SET is_active = 1, end_time = $1, question_count = $2, last_stats_msg_id = 0 
+                WHERE id = $3
+            """, end_time, count, data['test_id'])
+        
+        await message.answer(f"✅ Yangi guruh uchun ochildi!\n⏳ Vaqt: {data['minutes']} daqiqa\n❓ Savollar: {count} ta (Random)")
         await state.clear()
     except:
         await message.answer("Raqam kiriting.")
 
-# --- LOGIN ---
+# --- TEST YECHISH (STUDENT) ---
 @dp.message(F.text == "✍️ Test Yechish")
 async def solve_test_ask_code(message: types.Message, state: FSMContext):
-    await message.answer("🔑 Test kodi:")
+    await message.answer("🔑 Test kodini kiriting:")
     await state.set_state(BotStates.waiting_for_code)
 
 @dp.message(BotStates.waiting_for_code)
@@ -211,25 +306,32 @@ async def check_test_code(message: types.Message, state: FSMContext):
     
     async with db_pool.acquire() as conn:
         test = await conn.fetchrow("SELECT * FROM tests WHERE unique_code = $1", code)
-        result = await conn.fetchrow("SELECT session_version FROM results WHERE test_code = $1 AND user_id = $2", code, user_id)
+        # Faqat joriy toza sessiyadagi natijani tekshiramiz
+        result = await conn.fetchrow("SELECT score FROM results WHERE test_code = $1 AND user_id = $2", code, user_id)
 
     if not test: return await message.answer("❌ Test topilmadi.")
     if not test['is_active']: return await message.answer("🚫 Test o'chirilgan.")
-    if result and result['session_version'] >= test['session_version']:
-        return await message.answer("✅ Bu sessiyada topshirib bo'lgansiz.")
-    if test['end_time'] and datetime.utcnow() > test['end_time']:
-        return await message.answer("⌛️ Vaqt tugagan.")
+    if result and result['score'] > -1: return await message.answer("✅ Siz allaqachon topshirdingiz.")
+    if test['end_time'] and datetime.utcnow() > test['end_time']: return await message.answer("⌛️ Vaqt tugagan.")
 
     app_link = f"{WEB_APP_URL}?code={code}&userId={user_id}"
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🚀 Boshlash", web_app=WebAppInfo(url=app_link))]])
-    await message.answer("Testga kirish:", reply_markup=kb)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🚀 Boshlash: {test['name']}", web_app=WebAppInfo(url=app_link))]])
+    
+    sent_msg = await message.answer(f"Testga tayyormisiz?\nSavollar soni: {test['question_count']} ta", reply_markup=kb)
+    
+    # Message ID saqlaymiz (xabar o'zgarishi uchun)
+    async with db_pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO results (test_code, user_id, full_name, student_msg_id, score)
+            VALUES ($1, $2, $3, $4, -1)
+            ON CONFLICT (test_code, user_id) 
+            DO UPDATE SET student_msg_id = $4, full_name = $3
+        """, code, user_id, message.from_user.full_name, sent_msg.message_id)
+
     await state.clear()
 
-# =======================================================
-# YANGI API QISMI (ENG MUHIMI)
-# =======================================================
+# --- API (GET TEST) ---
 routes = web.RouteTableDef()
-
 @routes.get('/')
 async def home(request): return web.Response(text="Running")
 
@@ -240,32 +342,40 @@ async def api_get_test(request):
     if not code or not db_pool: return web.json_response({"error": "Error"}, status=400)
     
     async with db_pool.acquire() as conn:
-        test = await conn.fetchrow("SELECT questions, name, end_time, session_version FROM tests WHERE unique_code = $1", code)
+        test = await conn.fetchrow("SELECT * FROM tests WHERE unique_code = $1", code)
         if not test: return web.json_response({"error": "not_found"}, status=404)
         
         if user_id:
-            res = await conn.fetchrow("SELECT session_version FROM results WHERE test_code = $1 AND user_id = $2", code, int(user_id))
-            if res and res['session_version'] >= test['session_version']:
-                 return web.json_response({"error": "submitted"})
+            res = await conn.fetchrow("SELECT score FROM results WHERE test_code = $1 AND user_id = $2", code, int(user_id))
+            if res and res['score'] > -1: return web.json_response({"error": "submitted"})
 
         rem_sec = 0
         if test['end_time']:
             rem_sec = int((test['end_time'] - datetime.utcnow()).total_seconds())
         if rem_sec <= 0: return web.json_response({"error": "expired"})
         
+        # RANDOM LOGIC
+        all_questions = json.loads(test['questions'])
+        count = test['question_count']
+        seed_val = f"{user_id}_{test['unique_code']}" # Seed endi faqat user va kodga bog'liq
+        random.seed(seed_val)
+        
+        if count > 0 and count < len(all_questions):
+            selected_questions = random.sample(all_questions, count)
+        else:
+            selected_questions = all_questions
+
         return web.json_response({
             "name": test['name'], 
-            "questions": json.loads(test['questions']),
+            "questions": selected_questions,
             "remaining_seconds": rem_sec 
         })
 
-# --- YANGI POST METHOD (Telegram sendData o'rniga) ---
+# --- API (SUBMIT) ---
 @routes.post('/api/submit_result')
 async def api_submit_result(request):
     try:
         data = await request.json()
-        # data: {test_code, userId, student_name, score, total}
-        
         test_code = data.get('test_code')
         user_id = int(data.get('userId'))
         student_name = data.get('student_name')
@@ -273,31 +383,37 @@ async def api_submit_result(request):
         total = int(data.get('total'))
 
         async with db_pool.acquire() as conn:
-            test = await conn.fetchrow("SELECT owner_id, name, session_version, last_stats_msg_id, id FROM tests WHERE unique_code = $1", test_code)
-            if not test: return web.json_response({"error": "Test not found"}, status=404)
+            test = await conn.fetchrow("SELECT * FROM tests WHERE unique_code = $1", test_code)
+            if not test: return web.json_response({"error": "Not found"}, status=404)
 
-            # Bazaga yozish
+            # 1. Bazani yangilash
             await conn.execute("""
-                INSERT INTO results (test_code, user_id, score, total, full_name, session_version) 
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO results (test_code, user_id, score, total, full_name) 
+                VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (test_code, user_id) 
-                DO UPDATE SET score = $3, total = $4, full_name = $5, session_version = $6
-            """, test_code, user_id, score, total, student_name, test['session_version'])
+                DO UPDATE SET score = $3, total = $4, full_name = $5
+            """, test_code, user_id, score, total, student_name)
 
-            # Talabaga botdan xabar yuborish
-            try:
-                await bot.send_message(user_id, f"✅ <b>Natija qabul qilindi!</b>\n📚 {test['name']}\n📊 {score}/{total}", parse_mode="HTML")
-            except Exception as e:
-                print(f"Talabaga yuborilmadi: {e}")
+            # 2. TALABA XABARINI O'ZGARTIRISH
+            res_row = await conn.fetchrow("SELECT student_msg_id FROM results WHERE test_code=$1 AND user_id=$2", test_code, user_id)
+            if res_row and res_row['student_msg_id']:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=user_id,
+                        message_id=res_row['student_msg_id'],
+                        text=f"🏁 <b>Test yakunlandi!</b>\n\n📚 {test['name']}\n✅ Natija: <b>{score} / {total}</b>",
+                        parse_mode="HTML"
+                    )
+                except: pass
 
-            # TEST EGASIGA YANGILANADIGAN XABAR
+            # 3. TEST EGASIGA XABAR (LIVE STATS)
             all_results = await conn.fetch("""
                 SELECT full_name, score, total FROM results 
-                WHERE test_code = $1 AND session_version = $2 
+                WHERE test_code = $1 AND score > -1
                 ORDER BY score DESC
-            """, test_code, test['session_version'])
+            """, test_code)
             
-            stats_text = f"📊 <b>Natijalar: {test['name']}</b>\n\n"
+            stats_text = f"📊 <b>Natijalar (Guruh): {test['name']}</b>\n\n"
             for i, res in enumerate(all_results, 1):
                 stats_text += f"{i}. {res['full_name']} — <b>{res['score']}/{res['total']}</b>\n"
             
@@ -305,8 +421,7 @@ async def api_submit_result(request):
             try:
                 if msg_id > 0:
                     await bot.edit_message_text(chat_id=test['owner_id'], message_id=msg_id, text=stats_text, parse_mode="HTML")
-                else:
-                    raise Exception("No msg")
+                else: raise Exception
             except:
                 try:
                     sent = await bot.send_message(chat_id=test['owner_id'], text=stats_text, parse_mode="HTML")
@@ -315,7 +430,6 @@ async def api_submit_result(request):
 
         return web.json_response({"status": "ok"})
     except Exception as e:
-        print(f"API Error: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 async def start_server():
