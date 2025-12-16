@@ -11,16 +11,13 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiohttp import web
 import aiohttp_cors
 
-# ==========================================
-# SOZLAMALAR (O'ZGARTIRISH ESINGIZDAN CHIQMASIN!)
-# ==========================================
-
 # --- SOZLAMALAR ---
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 1917817674  # <-- O'Z ID RAQAMINGIZNI YOZING! (userinfobot orqali oling)
 # Github Pages Linki
 WEB_APP_URL = "https://xushnid.github.io/super-test-bot/" 
 # ==========================================
+
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -33,13 +30,12 @@ cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)")
 cursor.execute("CREATE TABLE IF NOT EXISTS tests (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, questions TEXT, is_active INTEGER DEFAULT 0)")
 conn.commit()
 
-# --- STATES (Admin uchun) ---
+# --- STATES ---
 class TestState(StatesGroup):
     waiting_for_name = State()
     waiting_for_file = State()
 
-# --- YORDAMCHI FUNKSIYA (Menyuni chizish) ---
-# Bu funksiya "IndexError" bo'lmasligi uchun kerak
+# --- YORDAMCHI FUNKSIYA ---
 async def refresh_test_menu(message: types.Message, test_id: int):
     cursor.execute("SELECT name, is_active FROM tests WHERE id = ?", (test_id,))
     test = cursor.fetchone()
@@ -52,7 +48,6 @@ async def refresh_test_menu(message: types.Message, test_id: int):
     name, is_active = test
     status_text = "🟢 Aktiv" if is_active else "🔴 Aktiv emas"
     
-    # Tugmalar
     btn_status = InlineKeyboardButton(text="🔴 O'chirish" if is_active else "🟢 Yoqish", callback_data=f"toggle_{test_id}")
     btn_back = InlineKeyboardButton(text="🔙 Ortga", callback_data="admin_tests")
     
@@ -65,7 +60,7 @@ async def refresh_test_menu(message: types.Message, test_id: int):
     except:
         pass
 
-# --- BOT HANDLERLARI ---
+# --- HANDLERLAR ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -73,28 +68,19 @@ async def cmd_start(message: types.Message):
     cursor.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
     conn.commit()
 
-    # 1. HAMMA UCHUN (Admin uchun ham) ko'rinadigan "Test yechish" tugmasi
     web_app_kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="✍️ Test yechish", web_app=WebAppInfo(url=WEB_APP_URL))]],
         resize_keyboard=True
     )
 
     if user_id == ADMIN_ID:
-        # 2. ADMIN UCHUN qo'shimcha "Boshqaruv paneli"
         admin_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⚙️ Testlarni boshqarish", callback_data="admin_tests")]
         ])
-        
-        # Adminga 2 ta xabar boradi:
-        # Birinchisi: Pastdagi menyuni chiqaradi
         await message.answer("Salom Admin! Testni sinash uchun pastdagi tugmani bosing 👇", reply_markup=web_app_kb)
-        # Ikkinchisi: Boshqaruv panelini chiqaradi
         await message.answer("Yoki testlarni tahrirlang:", reply_markup=admin_kb)
     else:
-        # Oddiy user faqat tugmani ko'radi
         await message.answer("Test yechish uchun tugmani bosing 👇", reply_markup=web_app_kb)
-
-# --- ADMIN PANEL LOGIKASI ---
 
 @dp.callback_query(F.data == "admin_tests")
 async def view_tests(call: types.CallbackQuery, state: FSMContext):
@@ -108,7 +94,6 @@ async def view_tests(call: types.CallbackQuery, state: FSMContext):
         buttons.append([InlineKeyboardButton(text=f"{status} {t_name}", callback_data=f"edit_test_{t_id}")])
     
     buttons.append([InlineKeyboardButton(text="➕ Yangi test yaratish", callback_data="new_test")])
-    
     await call.message.edit_text("📂 Barcha testlar ro'yxati:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
 
 @dp.callback_query(F.data == "new_test")
@@ -128,19 +113,11 @@ async def receive_name(message: types.Message, state: FSMContext):
     except: pass
 
     await state.update_data(test_name=test_name)
-    
-    # Xabarni yangilaymiz
     try:
-        await bot.edit_message_text(
-            chat_id=message.chat.id, 
-            message_id=msg_id, 
-            text=f"✅ Nom: {test_name}\n\n📂 Endi <b>test.txt</b> faylini yuklang (JSON formatda).",
-            parse_mode="HTML"
-        )
+        await bot.edit_message_text(chat_id=message.chat.id, message_id=msg_id, text=f"✅ Nom: {test_name}\n\n📂 Endi <b>test.txt</b> faylini yuklang (JSON formatda).", parse_mode="HTML")
     except:
         msg = await message.answer(f"✅ Nom: {test_name}\n\n📂 Endi <b>test.txt</b> faylini yuklang.")
         await state.update_data(msg_id=msg.message_id)
-        
     await state.set_state(TestState.waiting_for_file)
 
 @dp.message(TestState.waiting_for_file, F.document)
@@ -150,20 +127,17 @@ async def receive_file(message: types.Message, state: FSMContext):
     msg_id = data.get('msg_id')
     test_name = data.get('test_name')
 
-    # Faylni yuklab olish
     file_id = message.document.file_id
     file = await bot.get_file(file_id)
     file_content = await bot.download_file(file.file_path)
     json_content = file_content.read().decode('utf-8')
 
-    # JSON tekshirish
     try:
         json.loads(json_content)
     except:
-        await message.answer("❌ Fayl xato formatda! Iltimos to'g'ri JSON fayl yuklang.")
+        await message.answer("❌ Fayl xato formatda!")
         return
 
-    # Bazaga saqlash
     cursor.execute("INSERT INTO tests (name, questions, is_active) VALUES (?, ?, 0)", (test_name, json_content))
     conn.commit()
 
@@ -171,43 +145,32 @@ async def receive_file(message: types.Message, state: FSMContext):
     except: pass
     
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Ro'yxatga qaytish", callback_data="admin_tests")]])
-    
     try:
         await bot.edit_message_text(chat_id=message.chat.id, message_id=msg_id, text=f"✅ <b>{test_name}</b> saqlandi!", reply_markup=kb, parse_mode="HTML")
     except:
         await message.answer(f"✅ <b>{test_name}</b> saqlandi!", reply_markup=kb, parse_mode="HTML")
-        
     await state.clear()
-
-# --- TESTNI BOSHQARISH (Edit & Toggle) ---
 
 @dp.callback_query(F.data.startswith("edit_test_"))
 async def edit_single_test(call: types.CallbackQuery):
     try:
         test_id = int(call.data.split("_")[2])
         await refresh_test_menu(call.message, test_id)
-    except Exception as e:
-        print(f"Edit error: {e}")
+    except: pass
 
 @dp.callback_query(F.data.startswith("toggle_"))
 async def toggle_status(call: types.CallbackQuery):
     try:
         test_id = int(call.data.split("_")[1])
-        
         cursor.execute("SELECT is_active FROM tests WHERE id = ?", (test_id,))
         res = cursor.fetchone()
         if res:
-            current_status = res[0]
-            new_status = 0 if current_status else 1
+            new_status = 0 if res[0] else 1
             cursor.execute("UPDATE tests SET is_active = ? WHERE id = ?", (new_status, test_id))
             conn.commit()
-            
             await call.answer("Status o'zgardi!")
             await refresh_test_menu(call.message, test_id)
-    except Exception as e:
-        print(f"Toggle error: {e}")
-
-# --- WEB APP NATIJALARI ---
+    except: pass
 
 @dp.message(F.web_app_data)
 async def handle_result(message: types.Message):
@@ -218,25 +181,13 @@ async def handle_result(message: types.Message):
     total = data.get("total")
     username = f"@{message.from_user.username}" if message.from_user.username else "mavjud emas"
     
-    text = (
-        f"🏁 **Test Yakunlandi!**\n\n"
-        f"📚 **Test:** {test_name}\n"
-        f"👤 **Talaba:** {student_name}\n"
-        f"🔗 **Username:** {username}\n"
-        f"✅ **Natija:** {score} / {total}"
-    )
-    
-    # Talabaga javob
+    text = f"🏁 **Test Yakunlandi!**\n\n📚 {test_name}\n👤 {student_name}\n🔗 {username}\n✅ {score} / {total}"
     await message.answer(text, parse_mode="Markdown")
-    
-    # Adminga nusxa yuborish (agar o'zi yechmagan bo'lsa)
     if message.from_user.id != ADMIN_ID:
-        try: 
-            await bot.send_message(chat_id=ADMIN_ID, text=f"🔔 **Yangi Natija!**\n\n{text}", parse_mode="Markdown")
-        except: 
-            pass
+        try: await bot.send_message(chat_id=ADMIN_ID, text=f"🔔 **Yangi Natija!**\n\n{text}", parse_mode="Markdown")
+        except: pass
 
-# --- SERVER QISMI (Render uchun) ---
+# --- SERVER QISMI (TUZATILGAN) ---
 routes = web.RouteTableDef()
 
 @routes.get('/')
@@ -247,7 +198,8 @@ async def hello(request):
 async def get_active_tests(request):
     cursor.execute("SELECT id, name FROM tests WHERE is_active = 1")
     tests = [{"id": t[0], "name": t[1]} for t in cursor.fetchall()]
-    return web.json_response(tests, headers={"Access-Control-Allow-Origin": "*"})
+    # TUZATILDI: headers qo'lda qo'shilmadi, aiohttp_cors o'zi qo'shadi
+    return web.json_response(tests)
 
 @routes.get('/api/test/{id}')
 async def get_test_questions(request):
@@ -255,14 +207,15 @@ async def get_test_questions(request):
     cursor.execute("SELECT questions, name FROM tests WHERE id = ? AND is_active = 1", (test_id,))
     row = cursor.fetchone()
     if row:
-        return web.json_response({"name": row[1], "questions": json.loads(row[0])}, headers={"Access-Control-Allow-Origin": "*"})
-    return web.json_response({"error": "Test topilmadi"}, status=404, headers={"Access-Control-Allow-Origin": "*"})
+        # TUZATILDI: headers qo'lda qo'shilmadi
+        return web.json_response({"name": row[1], "questions": json.loads(row[0])})
+    return web.json_response({"error": "Test topilmadi"}, status=404)
 
 async def start_server():
     app = web.Application()
     app.add_routes(routes)
     
-    # CORS (Sayt va Bot gaplashishi uchun ruxsat)
+    # CORS SOZLAMALARI
     cors = aiohttp_cors.setup(app, defaults={
         "*": aiohttp_cors.ResourceOptions(
             allow_credentials=True,
@@ -271,6 +224,8 @@ async def start_server():
             allow_methods="*",
         )
     })
+    
+    # Barcha routelarga avtomatik CORS qo'shish
     for route in list(app.router.routes()):
         cors.add(route)
     
