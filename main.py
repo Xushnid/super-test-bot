@@ -17,7 +17,7 @@ import aiohttp_cors
 
 TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
-WEB_APP_URL = "https://xushnid.github.io/super-test-bot/" 
+WEB_APP_URL = "https://xushnid.github.io/super-test-bot/"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -55,6 +55,7 @@ async def create_db_pool():
     db_pool = await asyncpg.create_pool(DATABASE_URL, ssl='require')
     async with db_pool.acquire() as conn:
         await conn.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY)")
+        
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS tests (
                 id SERIAL PRIMARY KEY,
@@ -68,6 +69,8 @@ async def create_db_pool():
                 question_count INTEGER DEFAULT 0
             )
         """)
+        
+        # user_answers ni qo'shdik (JSON array string sifatida)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS results (
                 id SERIAL PRIMARY KEY,
@@ -77,6 +80,7 @@ async def create_db_pool():
                 total INTEGER DEFAULT 0,
                 full_name TEXT,
                 student_msg_id INTEGER DEFAULT 0,
+                user_answers TEXT, 
                 created_at TIMESTAMP DEFAULT NOW(),
                 UNIQUE(test_code, user_id)
             )
@@ -97,35 +101,19 @@ def generate_code(): return ''.join(random.choices(string.digits, k=5))
 # --- BOT HANDLERLARI ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    # Foydalanuvchini bazaga qo'shish
     async with db_pool.acquire() as conn:
         await conn.execute("INSERT INTO users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", message.from_user.id)
-    
-    # Tugmalar
     kb = ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="✍️ Test Yechish"), KeyboardButton(text="➕ Test Yaratish")],
         [KeyboardButton(text="📂 Mening Testlarim")]
     ], resize_keyboard=True)
-    
-    # Instruksiya Matni
-    welcome_text = (
-        f"👋 <b>Assalomu alaykum, {message.from_user.full_name}!</b>\n\n"
-        f"🤖 Bu bot orqali siz professional testlar tashkil qilishingiz yoki bilimingizni sinashingiz mumkin.\n\n"
-        f"ℹ️ <b>QISQA YO'RIQNOMA:</b>\n\n"
-        f"👨‍🏫 <b>O'qituvchilar uchun (Test tuzish):</b>\n"
-        f"1. <b>«➕ Test Yaratish»</b> tugmasini bosing va nom bering.\n"
-        f"2. Test faylini (<i>HEMIS formatda .txt</i>) yuklang.\n"
-        f"3. <b>«📂 Mening Testlarim»</b> bo'limiga o'tib, testni 🟢 <b>Aktivlashtiring</b> (vaqt va savollar sonini belgilang).\n"
-        f"4. Hosil bo'lgan <b>5 xonali kodni</b> talabalarga tarqating.\n\n"
-        f"👨‍🎓 <b>Talabalar uchun (Test yechish):</b>\n"
-        f"1. <b>«✍️ Test Yechish»</b> tugmasini bosing.\n"
-        f"2. Kodni kiriting va testni boshlang.\n\n"
-        f"🚀 <i>Boshlash uchun quyidagi tugmalardan birini tanlang:</i>"
+    welcome = (
+        f"👋 <b>Salom {message.from_user.full_name}!</b>\n\n"
+        f"👨‍🏫 <b>O'qituvchi:</b> Test yaratib, kodini tarqating.\n"
+        f"👨‍🎓 <b>Talaba:</b> Kodni kiriting va testni yeching.\n\n"
+        f"<i>Quyidagi tugmalardan foydalaning:</i>"
     )
-    
-    await message.answer(welcome_text, reply_markup=kb, parse_mode="HTML")
-
-
+    await message.answer(welcome, reply_markup=kb, parse_mode="HTML")
 
 @dp.message(F.text == "➕ Test Yaratish")
 async def create_test_start(message: types.Message, state: FSMContext):
@@ -273,15 +261,17 @@ async def check_test_code(message: types.Message, state: FSMContext):
 
     if not test: return await message.answer("❌ Test topilmadi.")
     if not test['is_active']: return await message.answer("🚫 Deaktiv.")
+    if result and result['score'] > -1: return await message.answer("✅ Siz allaqachon topshirdingiz.")
     
-    # MUHIM: Bu yerda endi bloklamaymiz, WebApp o'zi hal qiladi (reload uchun kerak)
-    # Faqat vaqtni tekshiramiz
-    if test['end_time'] and datetime.utcnow() > test['end_time']: return await message.answer("⌛️ Vaqt tugagan.")
+    # Avtomatik deaktiv qilish (Agar vaqt o'tgan bo'lsa)
+    if test['end_time'] and datetime.utcnow() > test['end_time']:
+        async with db_pool.acquire() as conn:
+            await conn.execute("UPDATE tests SET is_active = 0 WHERE id = $1", test['id'])
+        return await message.answer("⌛️ Vaqt tugagan. Test avtomatik o'chirildi.")
 
     app_link = f"{WEB_APP_URL}?code={code}&userId={user_id}"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🚀 Boshlash: {test['name']}", web_app=WebAppInfo(url=app_link))]])
     
-    # Message ID saqlaymiz
     sent_msg = await message.answer(f"Testga marhamat!", reply_markup=kb)
     async with db_pool.acquire() as conn:
         await conn.execute("""
@@ -307,30 +297,42 @@ async def api_get_test(request):
         test = await conn.fetchrow("SELECT * FROM tests WHERE unique_code = $1", code)
         if not test: return web.json_response({"error": "not_found"}, status=404)
         
-        # --- RELOAD LOGIKASI ---
+        # RANDOM LOGIC (COMMON FOR NEW & FINISHED)
+        all_questions = json.loads(test['questions'])
+        count = test['question_count']
+        seed_val = f"{user_id}_{test['unique_code']}" # Unikal seed
+        random.seed(seed_val)
+        
+        if count > 0 and count < len(all_questions):
+            # random.sample butun massivdan tanlaydi (ketma-ketlik shart emas)
+            selected_questions = random.sample(all_questions, count)
+        else:
+            selected_questions = all_questions
+
+        # CHECK IF FINISHED
         if user_id:
-            res = await conn.fetchrow("SELECT score, total FROM results WHERE test_code = $1 AND user_id = $2", code, int(user_id))
-            # Agar ball -1 dan katta bo'lsa, demak topshirib bo'lgan -> Natijani qaytaramiz
+            res = await conn.fetchrow("SELECT score, total, user_answers FROM results WHERE test_code = $1 AND user_id = $2", code, int(user_id))
             if res and res['score'] > -1:
                  return web.json_response({
                      "status": "finished",
                      "score": res['score'],
                      "total": res['total'],
-                     "name": test['name']
+                     "name": test['name'],
+                     "questions": selected_questions, # Savollar qaytariladi
+                     "user_answers": json.loads(res['user_answers']) if res['user_answers'] else [] # Javoblar ham
                  })
 
+        # CHECK TIME
         rem_sec = 0
         if test['end_time']:
             rem_sec = int((test['end_time'] - datetime.utcnow()).total_seconds())
-        if rem_sec <= 0: return web.json_response({"error": "expired"})
         
-        # RANDOM
-        all_questions = json.loads(test['questions'])
-        count = test['question_count']
-        seed_val = f"{user_id}_{test['unique_code']}"
-        random.seed(seed_val)
-        selected_questions = random.sample(all_questions, count) if 0 < count < len(all_questions) else all_questions
-
+        if rem_sec <= 0:
+            # Avtomatik deaktivatsiya
+            if test['is_active']:
+                await conn.execute("UPDATE tests SET is_active = 0 WHERE id = $1", test['id'])
+            return web.json_response({"error": "expired"})
+        
         return web.json_response({
             "status": "active",
             "name": test['name'], 
@@ -347,18 +349,18 @@ async def api_submit_result(request):
         student_name = data.get('student_name')
         score = int(data.get('score'))
         total = int(data.get('total'))
+        user_answers = json.dumps(data.get('user_answers')) # Javoblarni saqlaymiz
 
         async with db_pool.acquire() as conn:
             test = await conn.fetchrow("SELECT * FROM tests WHERE unique_code = $1", test_code)
             if not test: return web.json_response({"error": "Not found"}, status=404)
 
-            # Bazaga yozish
             await conn.execute("""
-                INSERT INTO results (test_code, user_id, score, total, full_name) 
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO results (test_code, user_id, score, total, full_name, user_answers) 
+                VALUES ($1, $2, $3, $4, $5, $6)
                 ON CONFLICT (test_code, user_id) 
-                DO UPDATE SET score = $3, total = $4, full_name = $5
-            """, test_code, user_id, score, total, student_name)
+                DO UPDATE SET score = $3, total = $4, full_name = $5, user_answers = $6
+            """, test_code, user_id, score, total, student_name, user_answers)
 
             # Talabaga xabar
             res_row = await conn.fetchrow("SELECT student_msg_id FROM results WHERE test_code=$1 AND user_id=$2", test_code, user_id)
@@ -368,9 +370,9 @@ async def api_submit_result(request):
                         text=f"🏁 <b>Test yakunlandi!</b>\n\n📚 {test['name']}\n✅ Natija: <b>{score} / {total}</b>", parse_mode="HTML")
                 except: pass
 
-            # Egasiga statistika
+            # Egasiga xabar
             all_results = await conn.fetch("SELECT full_name, score, total FROM results WHERE test_code = $1 AND score > -1 ORDER BY score DESC", test_code)
-            stats_text = f"📊 <b>Natijalar (Guruh): {test['name']}</b>\n\n"
+            stats_text = f"📊 <b>Natijalar: {test['name']}</b>\n\n"
             for i, res in enumerate(all_results, 1):
                 stats_text += f"{i}. {res['full_name']} — <b>{res['score']}/{res['total']}</b>\n"
             
