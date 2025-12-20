@@ -1,16 +1,9 @@
-
 :root {
     --bg-color: var(--tg-theme-bg-color, #f5f5f5);
     --text-color: var(--tg-theme-text-color, #000);
     --card-bg: var(--tg-theme-secondary-bg-color, #fff);
     --btn-color: var(--tg-theme-button-color, #3390ec);
     --btn-text: var(--tg-theme-button-text-color, #fff);
-    
-    /* Status Ranglari */
-    --color-fail: #ff4b4b;      /* <60% Qizil */
-    --color-fair: #cd853f;      /* 60-70% Jigarrang */
-    --color-good: #f1c40f;      /* 71-89% Sariq */
-    --color-excellent: #2ecc71; /* 90-100% Yashil */
 }
 
 body {
@@ -19,7 +12,6 @@ body {
     color: var(--text-color);
     margin: 0; padding: 15px;
     -webkit-tap-highlight-color: transparent;
-    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -33,13 +25,12 @@ body {
     margin-bottom: 20px;
 }
 
-/* Input va Tugmalar */
+/* INPUT VA TUGMALAR */
 input {
-    width: 100%; padding: 12px;
-    margin: 10px 0;
+    width: 100%; padding: 12px; margin: 10px 0;
     border: 1px solid #ccc; border-radius: 8px;
     font-size: 16px; box-sizing: border-box;
-    -webkit-user-select: text; user-select: text;
+    user-select: text;
 }
 
 .primary-btn {
@@ -59,67 +50,74 @@ input {
 }
 
 .small-btn {
-    padding: 5px 10px; font-size: 12px;
-    background: #eee; border: none; border-radius: 5px;
+    padding: 6px 12px; font-size: 13px;
+    background: #e0e0e0; border: none; border-radius: 6px;
     color: #333; cursor: pointer;
 }
 
-/* Savollar */
-.question-block { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
-.question-text { font-weight: 600; font-size: 16px; margin-bottom: 10px; }
+/* SAVOLLAR */
+.question-block { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+.question-text { font-weight: 600; font-size: 16px; margin-bottom: 12px; line-height: 1.4; }
 
 .option-label {
     display: flex; align-items: center;
     padding: 12px; margin-bottom: 8px;
     border: 1px solid #ddd; border-radius: 8px;
-    background: var(--card-bg); transition: all 0.2s;
+    background: var(--card-bg); transition: 0.2s;
 }
 .option-label.selected { border-color: var(--btn-color); background: rgba(51, 144, 236, 0.1); }
 .option-label input { display: none; }
 .option-circle {
-    width: 18px; height: 18px;
+    min-width: 20px; height: 20px;
     border: 2px solid #999; border-radius: 50%;
-    margin-right: 10px; flex-shrink: 0;
+    margin-right: 12px; flex-shrink: 0;
 }
 .option-label.selected .option-circle { border-color: var(--btn-color); background: var(--btn-color); }
 
-/* Natijalar Ko'rish (Review Mode) */
+/* NATIJALAR KO'RISH (REVIEW MODE) - MUHIM QISM */
+.review-item {
+    background: #f9f9f9;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid transparent;
+}
+
+/* To'g'ri javob stili */
 .review-correct {
-    border-color: var(--color-excellent) !important;
-    background-color: rgba(46, 204, 113, 0.15) !important;
-    color: #155724;
+    border-color: #2ecc71;
+    background-color: #e8f8f5;
+    color: #0e6655;
+    font-weight: 500;
 }
+.review-correct .option-circle { background: #2ecc71; border-color: #2ecc71; }
+
+/* Xato javob stili */
 .review-wrong {
-    border-color: var(--color-fail) !important;
-    background-color: rgba(255, 75, 75, 0.15) !important;
-    color: #721c24;
+    border-color: #e74c3c;
+    background-color: #fdedec;
+    color: #922b21;
 }
-.review-missed {
-    border-color: #999;
-    background-color: #f0f0f0;
-    opacity: 0.7;
+.review-wrong .option-circle { background: #e74c3c; border-color: #e74c3c; }
+
+/* Belgilanmagan variantlar */
+.review-neutral {
+    opacity: 0.6;
+    background: #fff;
+    border: 1px solid #eee;
 }
 
-/* Emoji SVG Styles */
-.emoji-container svg {
-    width: 100px; height: 100px;
-    margin-bottom: 15px;
-}
-
-/* Animatsiyalar */
-.pump-effect { animation: pump 0.8s infinite alternate; }
-@keyframes pump {
-    from { transform: scale(1); }
-    to { transform: scale(1.1); }
-}
+/* EMOJILAR */
+.emoji-container { margin: 20px 0; }
+.emoji-container svg { width: 120px; height: 120px; } /* Katta o'lcham */
 
 .score-box {
-    background: #f8f9fa; padding: 15px;
-    border-radius: 10px; margin: 20px 0;
+    background: #f0f2f5; padding: 20px;
+    border-radius: 12px; margin: 20px 0;
 }
-#result-score-number { font-size: 28px; display: block; margin-top: 5px; }
+#result-score-number { font-size: 32px; display: block; margin-top: 5px; color: #333; }
 
-.hidden { display: none; }
+.hidden { display: none !important; }
 .timer-float {
     position: fixed; top: 10px; right: 10px;
     background: #ff3b30; color: #fff;
