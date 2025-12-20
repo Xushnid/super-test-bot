@@ -3,37 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Test</title>
+    <title>Test Tizimi</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* To'g'ri javobni ko'rsatish uchun stil */
-        .correct-answer-show {
-            border: 2px solid #28a745 !important;
-            background-color: #f0fff4;
-        }
-    </style>
 </head>
 <body>
     <div class="container">
         
-        <!-- Kirish -->
+        <!-- 1. Kirish -->
         <div id="login-screen" class="card hidden">
             <h2 id="test-title">Test Yuklanmoqda...</h2>
-            <p class="subtitle">Ismingizni kiriting va boshlang</p>
+            <p class="subtitle">Ma'lumotlaringizni kiriting</p>
             <input type="text" id="student_name" placeholder="Ism Familiya" required>
             <button onclick="startQuiz()" class="primary-btn">Boshlash</button>
         </div>
 
-        <!-- Test Jarayoni -->
+        <!-- 2. Test Jarayoni -->
         <div id="quiz-screen" class="card hidden">
             <div class="quiz-header">
                 <h3>Test Jarayoni</h3>
             </div>
             <div id="questions-container"></div>
-            <button onclick="finishTest()" class="primary-btn finish-btn">Yakunlash</button>
         </div>
+
+        <!-- 3. Natija Oynasi (Yangi) -->
+        <div id="result-screen" class="card hidden" style="text-align: center;">
+            <div id="result-icon" class="emoji-container"></div>
+            <h2 id="result-title"></h2>
+            <p id="result-message"></p>
+            
+            <div class="score-box">
+                <span id="result-score-text"></span>
+                <strong id="result-score-number"></strong>
+            </div>
+
+            <div class="action-buttons">
+                <button onclick="viewDetails()" class="secondary-btn">👁 Natijalarni ko'rish</button>
+                <button onclick="tg.close()" class="primary-btn close-btn">Chiqish</button>
+            </div>
+        </div>
+
+        <!-- 4. Batafsil Ko'rish (Review) -->
+        <div id="review-screen" class="card hidden">
+            <div class="quiz-header">
+                <h3>Xatolar Tahlili</h3>
+                <button onclick="backToResult()" class="small-btn">Ortga</button>
+            </div>
+            <div id="review-container"></div>
+            <button onclick="tg.close()" class="primary-btn close-btn" style="margin-top: 20px;">Tugatish</button>
+        </div>
+
     </div>
     <script src="script.js"></script>
 </body>
