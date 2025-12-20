@@ -1,9 +1,16 @@
+
 :root {
     --bg-color: var(--tg-theme-bg-color, #f5f5f5);
     --text-color: var(--tg-theme-text-color, #000);
     --card-bg: var(--tg-theme-secondary-bg-color, #fff);
     --btn-color: var(--tg-theme-button-color, #3390ec);
     --btn-text: var(--tg-theme-button-text-color, #fff);
+    
+    /* Status Ranglari */
+    --color-fail: #ff4b4b;      /* <60% Qizil */
+    --color-fair: #cd853f;      /* 60-70% Jigarrang */
+    --color-good: #f1c40f;      /* 71-89% Sariq */
+    --color-excellent: #2ecc71; /* 90-100% Yashil */
 }
 
 body {
@@ -11,9 +18,9 @@ body {
     background: var(--bg-color);
     color: var(--text-color);
     margin: 0; padding: 15px;
-   -webkit-user-select: none; /* Safari */
-    -ms-user-select: none; /* IE 10 and IE 11 */
-    user-select: none; /* Standard syntax */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .container { max-width: 600px; margin: 0 auto; }
@@ -23,37 +30,49 @@ body {
     padding: 20px;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
 }
 
+/* Input va Tugmalar */
 input {
     width: 100%; padding: 12px;
     margin: 10px 0;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 16px;
-    box-sizing: border-box; /* Mobil uchun muhim */
-     -webkit-user-select: text;
-    user-select: text;
+    border: 1px solid #ccc; border-radius: 8px;
+    font-size: 16px; box-sizing: border-box;
+    -webkit-user-select: text; user-select: text;
 }
 
 .primary-btn {
     width: 100%; padding: 14px;
-    background: var(--btn-color);
-    color: var(--btn-text);
+    background: var(--btn-color); color: var(--btn-text);
     border: none; border-radius: 8px;
     font-size: 16px; font-weight: 600;
     cursor: pointer; margin-top: 10px;
 }
 
-.question-block { margin-bottom: 25px; }
+.secondary-btn {
+    width: 100%; padding: 14px;
+    background: transparent; color: var(--btn-color);
+    border: 2px solid var(--btn-color); border-radius: 8px;
+    font-size: 16px; font-weight: 600;
+    cursor: pointer; margin-top: 10px;
+}
+
+.small-btn {
+    padding: 5px 10px; font-size: 12px;
+    background: #eee; border: none; border-radius: 5px;
+    color: #333; cursor: pointer;
+}
+
+/* Savollar */
+.question-block { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
 .question-text { font-weight: 600; font-size: 16px; margin-bottom: 10px; }
 
 .option-label {
     display: flex; align-items: center;
     padding: 12px; margin-bottom: 8px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background: var(--card-bg);
+    border: 1px solid #ddd; border-radius: 8px;
+    background: var(--card-bg); transition: all 0.2s;
 }
 .option-label.selected { border-color: var(--btn-color); background: rgba(51, 144, 236, 0.1); }
 .option-label input { display: none; }
@@ -64,28 +83,46 @@ input {
 }
 .option-label.selected .option-circle { border-color: var(--btn-color); background: var(--btn-color); }
 
-/* Natijalar ranglari */
-.correct-answer-show { border: 2px solid #28a745 !important; background: #d4edda; }
-.option-label.correct { background: #d4edda !important; }
-.option-label.wrong { background: #f8d7da !important; }
+/* Natijalar Ko'rish (Review Mode) */
+.review-correct {
+    border-color: var(--color-excellent) !important;
+    background-color: rgba(46, 204, 113, 0.15) !important;
+    color: #155724;
+}
+.review-wrong {
+    border-color: var(--color-fail) !important;
+    background-color: rgba(255, 75, 75, 0.15) !important;
+    color: #721c24;
+}
+.review-missed {
+    border-color: #999;
+    background-color: #f0f0f0;
+    opacity: 0.7;
+}
 
-/* Suzuvchi Taymer */
+/* Emoji SVG Styles */
+.emoji-container svg {
+    width: 100px; height: 100px;
+    margin-bottom: 15px;
+}
+
+/* Animatsiyalar */
+.pump-effect { animation: pump 0.8s infinite alternate; }
+@keyframes pump {
+    from { transform: scale(1); }
+    to { transform: scale(1.1); }
+}
+
+.score-box {
+    background: #f8f9fa; padding: 15px;
+    border-radius: 10px; margin: 20px 0;
+}
+#result-score-number { font-size: 28px; display: block; margin-top: 5px; }
+
+.hidden { display: none; }
 .timer-float {
     position: fixed; top: 10px; right: 10px;
     background: #ff3b30; color: #fff;
     padding: 6px 12px; border-radius: 20px;
-    font-weight: bold; font-size: 14px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 1000;
-}
-
-.hidden { display: none; }
-
-/* Mobil uchun moslashish */
-@media (max-width: 480px) {
-    body { padding: 10px; }
-    .card { padding: 15px; }
-    h2 { font-size: 20px; }
-    .question-text { font-size: 15px; }
-    .option-label { padding: 10px; font-size: 14px; }
+    font-weight: bold; font-size: 14px; z-index: 1000;
 }
