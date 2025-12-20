@@ -13,18 +13,10 @@ const urlParams = new URLSearchParams(window.location.search);
 testCode = urlParams.get('code');
 userId = urlParams.get('userId');
 
-// --- YANGI SVG EMOJILAR (ANIQ KO'RINADIGAN) ---
 const SVGs = {
-    // Qizil Hafa (60% dan kam)
     sad: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#FF4B4B"/><circle cx="32" cy="40" r="6" fill="white"/><circle cx="68" cy="40" r="6" fill="white"/><path d="M30 75 Q50 55 70 75" stroke="white" stroke-width="5" fill="none"/></svg>`,
-    
-    // Jigarrang Neutral (60-70%)
     neutral: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#CD853F"/><circle cx="32" cy="40" r="6" fill="white"/><circle cx="68" cy="40" r="6" fill="white"/><rect x="30" y="65" width="40" height="6" rx="3" fill="white"/></svg>`,
-    
-    // Sariq Yaxshi (71-89%)
     smile: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#F1C40F"/><circle cx="32" cy="40" r="6" fill="#333"/><circle cx="68" cy="40" r="6" fill="#333"/><path d="M30 65 Q50 85 70 65" stroke="#333" stroke-width="5" fill="none"/></svg>`,
-    
-    // Yashil A'lo (90-100%)
     happy: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#2ECC71"/><path d="M25 45 Q32 35 39 45" stroke="white" stroke-width="5" fill="none"/><path d="M61 45 Q68 35 75 45" stroke="white" stroke-width="5" fill="none"/><path d="M30 65 Q50 90 70 65" fill="white"/></svg>`
 };
 
@@ -44,11 +36,30 @@ function loadTest() {
                 return;
             }
 
+            // Savollarni shuffle qilish
+            questions = shuffleArray(data.questions).map(q => {
+                let optionsObj = q.a.map((opt, i) => ({ text: opt, originalIndex: i }));
+                return { 
+                    q: q.q, 
+                    options: shuffleArray(optionsObj), 
+                    correctIndex: q.c,
+                    userSelected: null // Default
+                };
+            });
+
+            // AGAR TEST OLDIN TUGATILGAN BO'LSA
             if (data.status === "finished") {
+                // Javoblarni tiklaymiz
+                if(data.user_answers && data.user_answers.length === questions.length) {
+                    questions.forEach((q, i) => {
+                        q.userSelected = data.user_answers[i];
+                    });
+                }
                 renderResultScreen(data.score, data.total);
                 return;
             }
             
+            // YANGI TEST
             document.getElementById("test-title").innerText = data.name;
             
             const savedEndTime = localStorage.getItem(`end_${testCode}_${userId}`);
@@ -57,21 +68,10 @@ function loadTest() {
             
             if (!savedEndTime) localStorage.setItem(`end_${testCode}_${userId}`, (now + remainingSeconds).toString());
 
-            // Savollarni yuklash
-            questions = shuffleArray(data.questions).map(q => {
-                let optionsObj = q.a.map((opt, i) => ({ text: opt, originalIndex: i }));
-                return { 
-                    q: q.q, 
-                    options: shuffleArray(optionsObj), 
-                    correctIndex: q.c,
-                    userSelected: null 
-                };
-            });
-
             document.getElementById("login-screen").classList.remove("hidden");
             startTimer();
         })
-        .catch(err => alert("Internet xatosi!"));
+        .catch(err => alert("Tarmoq xatosi!"));
 }
 
 function startQuiz() {
@@ -153,7 +153,11 @@ function finishTest(force = false) {
     localStorage.removeItem(`end_${testCode}_${userId}`);
 
     let score = 0;
+    // Javoblar massivini yig'amiz
+    let userAnswers = [];
+    
     questions.forEach(q => {
+        userAnswers.push(q.userSelected); // null bo'lishi mumkin
         if (q.userSelected === q.correctIndex) score++;
     });
 
@@ -167,7 +171,8 @@ function finishTest(force = false) {
             userId: userId,
             student_name: document.getElementById("student_name").value || "Noma'lum",
             score: score,
-            total: questions.length
+            total: questions.length,
+            user_answers: userAnswers // Buni ham jo'natamiz
         })
     })
     .then(res => res.json())
@@ -181,7 +186,6 @@ function finishTest(force = false) {
     .catch(() => tg.close());
 }
 
-// --- NATIJALAR KO'RSATISH ---
 function renderResultScreen(score, total) {
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("quiz-screen").classList.add("hidden");
@@ -192,37 +196,22 @@ function renderResultScreen(score, total) {
     const iconDiv = document.getElementById("result-icon");
     const title = document.getElementById("result-title");
     const msg = document.getElementById("result-message");
-    const scoreText = document.getElementById("result-score-text");
     const scoreNum = document.getElementById("result-score-number");
 
     scoreNum.innerText = `${score} / ${total}`;
-    scoreText.innerText = `${percent}%`;
+    document.getElementById("result-score-text").innerText = `${percent}%`;
 
-    // Emojini tanlash
     if (percent < 60) {
-        iconDiv.innerHTML = SVGs.sad;
-        title.innerText = "Afsuski...";
-        msg.innerText = "Siz o'ta olmadingiz.";
-        title.style.color = "#ff4b4b";
+        iconDiv.innerHTML = SVGs.sad; title.innerText = "Afsuski..."; msg.innerText = "Siz o'ta olmadingiz."; title.style.color = "#ff4b4b";
     } else if (percent <= 70) {
-        iconDiv.innerHTML = SVGs.neutral;
-        title.innerText = "Qoniqarli";
-        msg.innerText = "Yomon emas, lekin yaxshiroq bo'lishi mumkin.";
-        title.style.color = "#cd853f";
+        iconDiv.innerHTML = SVGs.neutral; title.innerText = "Qoniqarli"; msg.innerText = "Yomon emas."; title.style.color = "#cd853f";
     } else if (percent <= 89) {
-        iconDiv.innerHTML = SVGs.smile;
-        title.innerText = "Yaxshi!";
-        msg.innerText = "Yaxshi natija, barakalla!";
-        title.style.color = "#f1c40f";
+        iconDiv.innerHTML = SVGs.smile; title.innerText = "Yaxshi!"; msg.innerText = "Yaxshi natija."; title.style.color = "#f1c40f";
     } else {
-        iconDiv.innerHTML = SVGs.happy;
-        title.innerText = "A'lo!";
-        msg.innerText = "Siz daho ekansiz! Tabriklaymiz!";
-        title.style.color = "#2ecc71";
+        iconDiv.innerHTML = SVGs.happy; title.innerText = "A'lo!"; msg.innerText = "Siz daho ekansiz!"; title.style.color = "#2ecc71";
     }
 }
 
-// --- XATOLARNI TAHLIL QILISH (TO'G'IRLANGAN) ---
 function viewDetails() {
     document.getElementById("result-screen").classList.add("hidden");
     const reviewScreen = document.getElementById("review-screen");
@@ -231,27 +220,31 @@ function viewDetails() {
     container.innerHTML = "";
 
     questions.forEach((item, index) => {
-        // Savol matni
         let html = `
         <div class="question-block">
             <div class="question-text">${index + 1}. ${item.q}</div>
             <div class="options">`;
         
         item.options.forEach(opt => {
-            let className = "review-item"; // Asosiy stil
+            let className = "review-item";
             let icon = "";
 
-            // Agar bu TO'G'RI javob bo'lsa
             if (opt.originalIndex === item.correctIndex) {
-                className += " review-correct";
-                icon = " ✅";
+                // To'g'ri javob
+                if (item.userSelected !== item.correctIndex) {
+                    // Agar user boshqasini tanlagan bo'lsa yoki tanlamagan bo'lsa -> Missed Correct
+                    className += " review-missed-correct";
+                    icon = " ✅ (To'g'ri javob)";
+                } else {
+                    className += " review-correct";
+                    icon = " ✅";
+                }
             }
-            // Agar foydalanuvchi buni XATO tanlagan bo'lsa
             else if (opt.originalIndex === item.userSelected) {
+                // User tanlagan XATO javob
                 className += " review-wrong";
                 icon = " ❌";
             }
-            // Tanlanmagan va noto'g'ri variantlar
             else {
                 className += " review-neutral";
             }
